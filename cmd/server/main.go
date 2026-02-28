@@ -3,7 +3,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/ngaddam369/svid-exchange/internal/audit"
@@ -63,12 +67,31 @@ func main() {
 	auditLog := audit.New()
 
 	// --- gRPC server ---
-	// NOTE: mTLS is required in production. For the MVP the server runs without
-	// TLS to allow local testing without a SPIRE agent. See TODO.md.
-	grpcServer := grpc.NewServer()
+	// mTLS is mandatory — TLS_CERT_FILE, TLS_KEY_FILE, TLS_CA_FILE must all be set.
+	// The service cannot start without them: identity extraction depends on the
+	// peer certificate presented during the TLS handshake.
+	tlsCert := os.Getenv("TLS_CERT_FILE")
+	tlsKey := os.Getenv("TLS_KEY_FILE")
+	tlsCA := os.Getenv("TLS_CA_FILE")
+
+	if tlsCert == "" || tlsKey == "" || tlsCA == "" {
+		log.Fatal().Msg("TLS_CERT_FILE, TLS_KEY_FILE, and TLS_CA_FILE must all be set — plaintext mode is not supported")
+	}
+
+	tlsConfig, err := buildMTLSConfig(tlsCert, tlsKey, tlsCA)
+	if err != nil {
+		log.Fatal().Err(err).Msg("build mTLS config")
+	}
+	serverOpts := []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsConfig))}
+	log.Info().Msg("mTLS enabled")
+
+	grpcServer := grpc.NewServer(serverOpts...)
 	svc := server.New(pl, minter, auditLog)
 	exchangev1.RegisterTokenExchangeServer(grpcServer, svc)
-	reflection.Register(grpcServer)
+
+	if os.Getenv("GRPC_REFLECTION") != "false" {
+		reflection.Register(grpcServer)
+	}
 
 	grpcLis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
@@ -125,4 +148,31 @@ func main() {
 	}
 
 	log.Info().Msg("stopped")
+}
+
+// buildMTLSConfig creates a TLS config requiring client certificate verification
+// against the provided CA. This is the transport-layer complement to the
+// SPIFFE ID extraction done at the application layer in spiffe/verifier.go.
+func buildMTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load server key pair: %w", err)
+	}
+
+	caPEM, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("read CA cert: %w", err)
+	}
+
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, errors.New("parse CA cert: no valid certificates found")
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    pool,
+		MinVersion:   tls.VersionTLS13,
+	}, nil
 }

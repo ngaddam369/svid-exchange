@@ -24,9 +24,11 @@ var (
 // ExtractID pulls the SPIFFE ID from the first URI SAN on the peer's leaf
 // certificate. It returns an error if no SPIFFE URI is found.
 //
-// In a real deployment this would use go-spiffe's x509bundle verification;
-// for the MVP we perform structural validation only and delegate trust to the
-// mTLS handshake configured at the gRPC server level.
+// Cert authenticity is guaranteed by the mTLS handshake at the transport layer
+// (buildMTLSConfig in cmd/server/main.go) — only certs signed by the trusted CA
+// reach this point. This function performs structural SPIFFE ID validation only.
+// When SPIRE is integrated, the CA supplied to buildMTLSConfig will be the SPIRE
+// workload API trust bundle, replacing the static TLS_CA_FILE.
 func ExtractID(ctx context.Context) (string, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {

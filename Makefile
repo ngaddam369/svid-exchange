@@ -3,7 +3,7 @@ MODULE     := github.com/ngaddam369/svid-exchange
 PROTO_DIR  := proto/exchange/v1
 GEN_DIR    := proto/exchange/v1
 
-.PHONY: all build test lint vet fmt proto run-local clean
+.PHONY: all build test lint vet fmt proto run-local dev-certs dev-certs-clean clean
 
 all: build
 
@@ -13,7 +13,7 @@ build:
 
 ## test: run all tests with race detector
 test:
-	go test -race -count=1 ./...
+	go test -v -race -count=1 ./...
 
 ## fmt: check gofmt formatting (fail if unformatted files exist)
 fmt:
@@ -42,9 +42,23 @@ proto:
 		--go-grpc_opt=paths=source_relative \
 		$(PROTO_DIR)/exchange.proto
 
-## run-local: start the server using the example policy file
-run-local:
-	POLICY_FILE=config/policy.example.yaml go run ./cmd/server
+## dev-certs: generate self-signed dev certs for local mTLS testing (skips if already present)
+dev-certs:
+	@bash scripts/gen-dev-certs.sh
+
+## dev-certs-clean: force regeneration of dev certs
+dev-certs-clean:
+	@rm -rf dev/certs/
+	@bash scripts/gen-dev-certs.sh
+
+## run-local: start the server with mTLS using dev certs (standard dev mode)
+run-local: dev-certs
+	POLICY_FILE=config/policy.example.yaml \
+	TLS_CERT_FILE=dev/certs/server.crt \
+	TLS_KEY_FILE=dev/certs/server.key \
+	TLS_CA_FILE=dev/certs/ca.crt \
+	go run ./cmd/server
+
 
 ## clean: remove build artifacts
 clean:
