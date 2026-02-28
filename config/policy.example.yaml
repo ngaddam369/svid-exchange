@@ -1,0 +1,39 @@
+# policy.example.yaml — svid-exchange policy configuration
+#
+# Copy this file to config/policy.yaml and edit for your environment.
+# Set POLICY_FILE=/path/to/policy.yaml when starting the server.
+#
+# Each policy entry grants a subject SPIFFE ID permission to exchange its SVID
+# for a token targeting a specific service, with a bounded scope set and TTL.
+#
+# Fields:
+#   name           — human-readable label (unique, used in audit logs)
+#   subject        — SPIFFE ID of the calling service (extracted from mTLS cert)
+#   target         — SPIFFE ID of the service being called
+#   allowed_scopes — complete set of scopes this subject may request for this target
+#   max_ttl        — maximum token lifetime in seconds (request is capped to this)
+
+policies:
+  - name: order-to-payment
+    subject: "spiffe://cluster.local/ns/default/sa/order"
+    target:  "spiffe://cluster.local/ns/default/sa/payment"
+    allowed_scopes:
+      - payments:charge
+      - payments:refund
+    max_ttl: 300   # 5 minutes
+
+  - name: warehouse-to-inventory
+    subject: "spiffe://cluster.local/ns/default/sa/warehouse"
+    target:  "spiffe://cluster.local/ns/default/sa/inventory"
+    allowed_scopes:
+      - inventory:read
+      - inventory:reserve
+    max_ttl: 60    # 1 minute — read-heavy, keep short
+
+  - name: api-gateway-to-order
+    subject: "spiffe://cluster.local/ns/default/sa/api-gateway"
+    target:  "spiffe://cluster.local/ns/default/sa/order"
+    allowed_scopes:
+      - orders:read
+      - orders:create
+    max_ttl: 120

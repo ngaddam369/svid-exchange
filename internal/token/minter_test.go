@@ -1,0 +1,160 @@
+package token
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+func newTestMinter(t *testing.T) *Minter {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	return NewMinterFromKey(key)
+}
+
+func parseClaims(t *testing.T, m *Minter, tokenStr string) jwt.MapClaims {
+	t.Helper()
+	tok, err := jwt.Parse(tokenStr, func(tok *jwt.Token) (any, error) {
+		if _, ok := tok.Method.(*jwt.SigningMethodECDSA); !ok {
+			t.Fatalf("unexpected signing method: %v", tok.Header["alg"])
+		}
+		return m.PublicKey(), nil
+	})
+	if err != nil {
+		t.Fatalf("parse token: %v", err)
+	}
+	claims, ok := tok.Claims.(jwt.MapClaims)
+	if !ok {
+		t.Fatal("claims not MapClaims")
+	}
+	return claims
+}
+
+func TestMint_Claims(t *testing.T) {
+	m := newTestMinter(t)
+	subject := "spiffe://cluster.local/ns/default/sa/order"
+	target := "spiffe://cluster.local/ns/default/sa/payment"
+	scopes := []string{"payments:charge", "payments:refund"}
+
+	before := time.Now().Unix()
+	result, err := m.Mint(subject, target, scopes, 300)
+	after := time.Now().Unix()
+
+	if err != nil {
+		t.Fatalf("Mint error: %v", err)
+	}
+
+	claims := parseClaims(t, m, result.Token)
+
+	if claims["iss"] != issuer {
+		t.Errorf("iss = %q, want %q", claims["iss"], issuer)
+	}
+	if claims["sub"] != subject {
+		t.Errorf("sub = %q, want %q", claims["sub"], subject)
+	}
+
+	aud, err := claims.GetAudience()
+	if err != nil || len(aud) != 1 || aud[0] != target {
+		t.Errorf("aud = %v, want [%q]", aud, target)
+	}
+
+	scope, _ := claims["scope"].(string)
+	for _, s := range scopes {
+		if !strings.Contains(scope, s) {
+			t.Errorf("scope %q missing from %q", s, scope)
+		}
+	}
+
+	jti, _ := claims["jti"].(string)
+	if jti == "" {
+		t.Error("jti is empty")
+	}
+	if result.TokenID != jti {
+		t.Errorf("TokenID = %q, want %q", result.TokenID, jti)
+	}
+
+	iat, _ := claims["iat"].(float64)
+	exp, _ := claims["exp"].(float64)
+
+	if int64(iat) < before || int64(iat) > after {
+		t.Errorf("iat %v outside [%v, %v]", iat, before, after)
+	}
+	expectedExp := int64(iat) + 300
+	if int64(exp) != expectedExp {
+		t.Errorf("exp = %v, want %v (iat+300)", exp, expectedExp)
+	}
+	if result.ExpiresAt.Unix() != int64(exp) {
+		t.Errorf("ExpiresAt = %v, want %v", result.ExpiresAt.Unix(), int64(exp))
+	}
+}
+
+func TestMint_TTLCap(t *testing.T) {
+	m := newTestMinter(t)
+	tests := []struct {
+		name    string
+		ttl     int32
+		wantTTL int64
+	}{
+		{"within cap", 300, 300},
+		{"at cap", maxTTLCap, maxTTLCap},
+		{"exceeds cap", maxTTLCap + 1, maxTTLCap},
+		{"zero uses cap", 0, maxTTLCap},
+		{"negative uses cap", -1, maxTTLCap},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := m.Mint("spiffe://a", "spiffe://b", []string{"s:r"}, tc.ttl)
+			if err != nil {
+				t.Fatalf("Mint: %v", err)
+			}
+			claims := parseClaims(t, m, result.Token)
+			iat, _ := claims["iat"].(float64)
+			exp, _ := claims["exp"].(float64)
+			gotTTL := int64(exp) - int64(iat)
+			if gotTTL != tc.wantTTL {
+				t.Errorf("TTL = %d, want %d", gotTTL, tc.wantTTL)
+			}
+		})
+	}
+}
+
+func TestMint_ScopeFiltering(t *testing.T) {
+	m := newTestMinter(t)
+
+	// Only the scopes passed to Mint appear in the token — the minter trusts
+	// that policy.Evaluate already filtered them.
+	scopes := []string{"payments:charge"}
+	result, err := m.Mint("spiffe://a", "spiffe://b", scopes, 60)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	claims := parseClaims(t, m, result.Token)
+	scope, _ := claims["scope"].(string)
+	if scope != "payments:charge" {
+		t.Errorf("scope = %q, want %q", scope, "payments:charge")
+	}
+}
+
+func TestMint_UniqueJTI(t *testing.T) {
+	m := newTestMinter(t)
+	seen := make(map[string]bool)
+	for i := 0; i < 100; i++ {
+		r, err := m.Mint("spiffe://a", "spiffe://b", []string{"s:r"}, 60)
+		if err != nil {
+			t.Fatalf("Mint: %v", err)
+		}
+		if seen[r.TokenID] {
+			t.Fatalf("duplicate jti after %d mints", i)
+		}
+		seen[r.TokenID] = true
+	}
+}

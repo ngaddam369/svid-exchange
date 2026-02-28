@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package exchange.v1;
+
+option go_package = "github.com/ngaddam369/svid-exchange/proto/exchange/v1;exchangev1";
+
+// TokenExchange exchanges a caller's SPIFFE SVID (presented via mTLS) for a
+// scoped short-lived JWT targeting a specific service.
+service TokenExchange {
+  rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
+}
+
+// ExchangeRequest carries what the caller wants — NOT who the caller is.
+// The caller's identity is extracted from the mTLS peer certificate and cannot
+// be forged via the request body.
+message ExchangeRequest {
+  // target_service is the SPIFFE ID of the service being called.
+  string target_service = 1;
+
+  // scopes are the permission scopes requested for this token.
+  repeated string scopes = 2;
+
+  // ttl_seconds is the requested TTL; capped by the policy max_ttl.
+  int32 ttl_seconds = 3;
+}
+
+message ExchangeResponse {
+  // token is the signed ES256 JWT.
+  string token = 1;
+
+  // expires_at is the unix timestamp when the token expires.
+  int64 expires_at = 2;
+
+  // granted_scopes are the scopes actually granted (subset of requested).
+  repeated string granted_scopes = 3;
+
+  // token_id is the JWT jti claim — tracked for future replay protection.
+  string token_id = 4;
+}
