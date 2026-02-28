@@ -11,9 +11,10 @@ all: build
 build:
 	go build -o bin/$(BINARY) ./cmd/server
 
-## test: run all tests with race detector
+## test: run all tests with race detector and show coverage summary
 test:
-	go test -v -race -count=1 ./...
+	go test -v -race -count=1 -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | grep -E "^total|^github"
 
 ## fmt: check gofmt formatting (fail if unformatted files exist)
 fmt:

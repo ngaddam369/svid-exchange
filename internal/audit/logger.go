@@ -2,7 +2,7 @@
 package audit
 
 import (
-	"os"
+	"io"
 
 	"github.com/rs/zerolog"
 )
@@ -12,10 +12,10 @@ type Logger struct {
 	log zerolog.Logger
 }
 
-// New creates an audit Logger writing to stdout.
-func New() *Logger {
+// New creates an audit Logger writing to w.
+func New(w io.Writer) *Logger {
 	return &Logger{
-		log: zerolog.New(os.Stdout).With().Timestamp().Logger(),
+		log: zerolog.New(w).With().Timestamp().Logger(),
 	}
 }
 

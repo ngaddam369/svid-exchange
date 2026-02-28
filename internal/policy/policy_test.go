@@ -165,3 +165,42 @@ func TestEvaluate(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadFile(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T) string // returns path to pass to LoadFile
+	}{
+		{
+			name: "file not found",
+			setup: func(_ *testing.T) string {
+				return "/nonexistent/path/policy.yaml"
+			},
+		},
+		{
+			name: "invalid YAML",
+			setup: func(t *testing.T) string {
+				f, err := os.CreateTemp(t.TempDir(), "policy-*.yaml")
+				if err != nil {
+					t.Fatalf("create temp file: %v", err)
+				}
+				if _, err := f.WriteString("{{{{ not valid yaml"); err != nil {
+					t.Fatalf("write temp file: %v", err)
+				}
+				if err := f.Close(); err != nil {
+					t.Fatalf("close temp file: %v", err)
+				}
+				return f.Name()
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadFile(tc.setup(t))
+			if err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}

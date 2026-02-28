@@ -22,6 +22,7 @@ import (
 	"github.com/ngaddam369/svid-exchange/internal/audit"
 	"github.com/ngaddam369/svid-exchange/internal/policy"
 	"github.com/ngaddam369/svid-exchange/internal/server"
+	"github.com/ngaddam369/svid-exchange/internal/spiffe"
 	"github.com/ngaddam369/svid-exchange/internal/token"
 	exchangev1 "github.com/ngaddam369/svid-exchange/proto/exchange/v1"
 )
@@ -64,7 +65,7 @@ func main() {
 	}
 
 	// --- Audit logger ---
-	auditLog := audit.New()
+	auditLog := audit.New(os.Stdout)
 
 	// --- gRPC server ---
 	// mTLS is mandatory — TLS_CERT_FILE, TLS_KEY_FILE, TLS_CA_FILE must all be set.
@@ -86,7 +87,7 @@ func main() {
 	log.Info().Msg("mTLS enabled")
 
 	grpcServer := grpc.NewServer(serverOpts...)
-	svc := server.New(pl, minter, auditLog)
+	svc := server.New(spiffe.Extractor{}, pl, minter, auditLog)
 	exchangev1.RegisterTokenExchangeServer(grpcServer, svc)
 
 	if os.Getenv("GRPC_REFLECTION") != "false" {

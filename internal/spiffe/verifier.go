@@ -59,6 +59,15 @@ func extractFromTLSState(state tls.ConnectionState) (string, error) {
 	return "", ErrNoSPIFFEID
 }
 
+// Extractor implements server.IDExtractor using the mTLS peer certificate.
+// Its zero value is ready to use.
+type Extractor struct{}
+
+// ExtractID implements server.IDExtractor.
+func (Extractor) ExtractID(ctx context.Context) (string, error) {
+	return ExtractID(ctx)
+}
+
 // validateSPIFFEID enforces the SPIFFE ID format: spiffe://<trust-domain>/...
 func validateSPIFFEID(u *url.URL) error {
 	if u.Host == "" {

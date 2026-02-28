@@ -51,14 +51,14 @@ type EvalResult struct {
 }
 
 // Evaluate checks whether subject may exchange for target with the given
-// scopes and TTL. It returns the intersection of requested and allowed
-// scopes, capped to max_ttl.
+// scopes and TTL. It returns the permitted subset of the requested scopes,
+// capped to max_ttl.
 func (l *Loader) Evaluate(subject, target string, scopes []string, ttlSeconds int32) EvalResult {
 	for _, p := range l.policies {
 		if p.Subject != subject || p.Target != target {
 			continue
 		}
-		granted := intersect(scopes, p.AllowedScopes)
+		granted := allowedSubset(scopes, p.AllowedScopes)
 		if len(granted) == 0 {
 			return EvalResult{Allowed: false}
 		}
@@ -75,12 +75,13 @@ func (l *Loader) Evaluate(subject, target string, scopes []string, ttlSeconds in
 	return EvalResult{Allowed: false}
 }
 
-// intersect returns elements present in both a and b, preserving order of a.
-func intersect(a, b []string) []string {
+// allowedSubset returns the scopes from requested that the policy permits,
+// preserving the order of requested.
+func allowedSubset(requested, allowed []string) []string {
 	var out []string
-	for _, v := range a {
-		if slices.Contains(b, v) {
-			out = append(out, v)
+	for _, scope := range requested {
+		if slices.Contains(allowed, scope) {
+			out = append(out, scope)
 		}
 	}
 	return out
