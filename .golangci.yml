@@ -7,14 +7,12 @@ linters:
     - govet
     - staticcheck
     - unused
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-issues:
-  exclude-rules:
-    - path: "_test\\.go"
-      linters:
-        - errcheck
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+  exclusions:
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - errcheck
