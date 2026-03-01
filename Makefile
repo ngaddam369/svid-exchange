@@ -3,7 +3,7 @@ MODULE     := github.com/ngaddam369/svid-exchange
 PROTO_DIR  := proto/exchange/v1
 GEN_DIR    := proto/exchange/v1
 
-.PHONY: build test lint vet fmt proto verify validate-policy compose-up compose-down clean
+.PHONY: build test lint vet fmt proto verify validate-policy docs-build compose-up compose-down clean
 
 ## build: compile the server binary and validate tool
 build:
@@ -42,8 +42,16 @@ proto:
 		--go-grpc_opt=paths=source_relative \
 		$(PROTO_DIR)/exchange.proto
 
-## verify: run the full checklist (build → lint → test)
-verify: build lint test
+## docs-build: build the mdBook documentation site (skipped if mdbook is not installed)
+docs-build:
+	@if command -v mdbook > /dev/null 2>&1; then \
+		mdbook build docs; \
+	else \
+		echo "mdbook not installed — skipping docs build (install from https://github.com/rust-lang/mdBook/releases)"; \
+	fi
+
+## verify: run the full checklist (build → lint → test → docs)
+verify: build lint test docs-build
 
 ## validate-policy: lint the policy file before deploying (uses POLICY_FILE env var or default)
 validate-policy: build

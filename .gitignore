@@ -27,6 +27,9 @@ bin/
 /svid-exchange
 /svid-exchange-validate
 
+# mdBook generated output
+docs/book/
+
 # Environment files
 .env
 *.env
