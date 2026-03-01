@@ -3,11 +3,12 @@ MODULE     := github.com/ngaddam369/svid-exchange
 PROTO_DIR  := proto/exchange/v1
 GEN_DIR    := proto/exchange/v1
 
-.PHONY: build test lint vet fmt proto verify compose-up compose-down clean
+.PHONY: build test lint vet fmt proto verify validate-policy compose-up compose-down clean
 
-## build: compile the server binary
+## build: compile the server binary and validate tool
 build:
 	go build -o bin/$(BINARY) ./cmd/server
+	go build -o bin/$(BINARY)-validate ./cmd/validate
 
 ## test: run all tests with race detector and show coverage summary
 test:
@@ -44,8 +45,12 @@ proto:
 ## verify: run the full checklist (build → vet → lint → test)
 verify: build vet lint test
 
-## compose-up: run verify, then start SPIRE + svid-exchange in Docker Compose
-compose-up: verify
+## validate-policy: lint the policy file before deploying (uses POLICY_FILE env var or default)
+validate-policy: build
+	./bin/svid-exchange-validate
+
+## compose-up: run verify + policy lint, then start SPIRE + svid-exchange in Docker Compose
+compose-up: verify validate-policy
 	docker compose up --build
 
 ## compose-down: stop all services and remove named volumes (clean slate)
