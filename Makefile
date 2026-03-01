@@ -3,9 +3,7 @@ MODULE     := github.com/ngaddam369/svid-exchange
 PROTO_DIR  := proto/exchange/v1
 GEN_DIR    := proto/exchange/v1
 
-.PHONY: all build test lint vet fmt proto run-local dev-certs dev-certs-clean clean
-
-all: build
+.PHONY: build test lint vet fmt proto verify run-local dev-certs dev-certs-clean compose-up compose-down clean
 
 ## build: compile the server binary
 build:
@@ -52,14 +50,25 @@ dev-certs-clean:
 	@rm -rf dev/certs/
 	@bash scripts/gen-dev-certs.sh
 
-## run-local: start the server with mTLS using dev certs (standard dev mode)
-run-local: dev-certs
+## verify: run the full checklist (build → vet → lint → test)
+verify: build vet lint test
+
+## run-local: run verify + dev-certs, then start the server with mTLS
+run-local: verify dev-certs
 	POLICY_FILE=config/policy.example.yaml \
 	TLS_CERT_FILE=dev/certs/server.crt \
 	TLS_KEY_FILE=dev/certs/server.key \
 	TLS_CA_FILE=dev/certs/ca.crt \
 	go run ./cmd/server
 
+
+## compose-up: run verify + dev-certs, then start SPIRE + svid-exchange in Docker Compose
+compose-up: verify dev-certs
+	docker compose up --build
+
+## compose-down: stop all services and remove named volumes (clean slate)
+compose-down:
+	docker compose down -v
 
 ## clean: remove build artifacts
 clean:

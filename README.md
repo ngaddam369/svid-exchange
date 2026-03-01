@@ -17,6 +17,7 @@ caller (SVID)  →  svid-exchange  →  scoped JWT  →  target service
 - Go 1.26 (managed via [mise](https://mise.jdx.dev))
 - `openssl` (for dev cert generation)
 - `golangci-lint` v2.10.1
+- Docker + Docker Compose (for the full SPIRE dev environment)
 
 ## Running locally
 
@@ -24,7 +25,20 @@ caller (SVID)  →  svid-exchange  →  scoped JWT  →  target service
 make run-local
 ```
 
-This generates self-signed dev certs (skipped if already present) and starts the server with mTLS on `:8080` and health endpoints on `:8081`.
+Runs the full verification checklist (build → vet → lint → test), generates dev certs if absent, then starts the server with mTLS on `:8080` and health endpoints on `:8081`.
+
+### Full SPIRE dev environment
+
+```bash
+make compose-up
+```
+
+Runs the verification checklist, then starts SPIRE Server + Agent + svid-exchange via Docker Compose. Workload entries matching `config/policy.example.yaml` are registered automatically.
+
+```bash
+make compose-down   # stop all services and wipe named volumes (clean slate)
+docker compose logs -f   # tail logs while running
+```
 
 Environment variables (all optional, shown with defaults):
 
@@ -65,10 +79,15 @@ Policies are defined in YAML. See [`config/policy.example.yaml`](config/policy.e
 |---|---|
 | `make build` | Compile the server binary to `bin/` |
 | `make test` | Run all tests with race detector and coverage summary |
-| `make lint` | Run golangci-lint |
 | `make fmt` | Check gofmt formatting |
 | `make vet` | Run go vet |
+| `make lint` | Run golangci-lint |
+| `make verify` | Full checklist: build → vet → lint → test |
+| `make run-local` | verify + dev-certs, then start the server with mTLS |
+| `make compose-up` | verify + dev-certs, then start SPIRE + svid-exchange via Docker Compose |
+| `make compose-down` | Stop all Compose services and remove named volumes |
 | `make dev-certs` | Generate self-signed dev certs (skips if present) |
 | `make dev-certs-clean` | Force-regenerate dev certs |
-| `make run-local` | Start the server locally with mTLS |
 | `make proto` | Regenerate Go code from `.proto` files |
+| `make tidy` | `go mod tidy` + `go mod verify` |
+| `make clean` | Remove build artifacts (`bin/`) |

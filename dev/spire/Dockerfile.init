@@ -1,0 +1,16 @@
+# Dockerfile.init — dev only, never use in production.
+#
+# The official SPIRE images are distroless (no shell, no wget).
+# This image layers the SPIRE server and agent binaries on top of Alpine so
+# that spire-init and spire-agent can use a shell and standard tools.
+#
+# The SPIRE binaries are statically linked (CGO_ENABLED=0) so they run
+# without issue on Alpine's musl libc.
+
+FROM ghcr.io/spiffe/spire-server:1.10.0 AS spire-server-src
+FROM ghcr.io/spiffe/spire-agent:1.10.0  AS spire-agent-src
+
+FROM alpine:3.20
+COPY --from=spire-server-src /opt/spire/bin/spire-server /opt/spire/bin/spire-server
+COPY --from=spire-agent-src  /opt/spire/bin/spire-agent  /opt/spire/bin/spire-agent
+ENV PATH="/opt/spire/bin:${PATH}"
