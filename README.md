@@ -16,4 +16,4 @@ Runs the full verification checklist, then starts SPIRE Server + Agent + svid-ex
 
 ## Documentation
 
-**[Read the documentation](https://ngaddam369.github.io/svid-exchange/)**.
+**[Read the documentation](https://ngaddam369.github.io/svid-exchange/)**

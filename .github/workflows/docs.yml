@@ -29,7 +29,9 @@ jobs:
             | tar xz -C /usr/local/bin
 
       - name: Install mdbook-mermaid
-        run: cargo install mdbook-mermaid
+        run: |
+          curl -sSL https://github.com/badboy/mdbook-mermaid/releases/download/v0.14.0/mdbook-mermaid-v0.14.0-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz -C /usr/local/bin
 
       - name: Build docs
         run: mdbook build docs
