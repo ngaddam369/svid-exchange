@@ -230,6 +230,63 @@ policies:
 `)
 			},
 		},
+		{
+			name: "empty allowed_scopes",
+			setup: func(t *testing.T) string {
+				return writeTemp(t, `
+policies:
+  - name: empty-scopes
+    subject: "spiffe://cluster.local/ns/default/sa/order"
+    target:  "spiffe://cluster.local/ns/default/sa/payment"
+    allowed_scopes: []
+    max_ttl: 60
+`)
+			},
+		},
+		{
+			name: "zero max_ttl",
+			setup: func(t *testing.T) string {
+				return writeTemp(t, `
+policies:
+  - name: zero-ttl
+    subject: "spiffe://cluster.local/ns/default/sa/order"
+    target:  "spiffe://cluster.local/ns/default/sa/payment"
+    allowed_scopes: ["payments:charge"]
+    max_ttl: 0
+`)
+			},
+		},
+		{
+			name: "negative max_ttl",
+			setup: func(t *testing.T) string {
+				return writeTemp(t, `
+policies:
+  - name: negative-ttl
+    subject: "spiffe://cluster.local/ns/default/sa/order"
+    target:  "spiffe://cluster.local/ns/default/sa/payment"
+    allowed_scopes: ["payments:charge"]
+    max_ttl: -1
+`)
+			},
+		},
+		{
+			name: "duplicate subject-target pair",
+			setup: func(t *testing.T) string {
+				return writeTemp(t, `
+policies:
+  - name: first
+    subject: "spiffe://cluster.local/ns/default/sa/order"
+    target:  "spiffe://cluster.local/ns/default/sa/payment"
+    allowed_scopes: ["payments:charge"]
+    max_ttl: 60
+  - name: duplicate
+    subject: "spiffe://cluster.local/ns/default/sa/order"
+    target:  "spiffe://cluster.local/ns/default/sa/payment"
+    allowed_scopes: ["payments:refund"]
+    max_ttl: 120
+`)
+			},
+		},
 	}
 
 	for _, tc := range tests {

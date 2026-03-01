@@ -45,6 +45,7 @@ func LoadFile(path string) (*Loader, error) {
 	if len(f.Policies) == 0 {
 		return nil, errors.New("policy file contains no policies")
 	}
+	seen := make(map[string]int) // "subject\x00target" → first index
 	for i, p := range f.Policies {
 		if err := validateSPIFFEID(p.Subject); err != nil {
 			return nil, fmt.Errorf("policy %d (%q): invalid subject: %w", i, p.Name, err)
@@ -52,6 +53,17 @@ func LoadFile(path string) (*Loader, error) {
 		if err := validateSPIFFEID(p.Target); err != nil {
 			return nil, fmt.Errorf("policy %d (%q): invalid target: %w", i, p.Name, err)
 		}
+		if len(p.AllowedScopes) == 0 {
+			return nil, fmt.Errorf("policy %d (%q): allowed_scopes must not be empty", i, p.Name)
+		}
+		if p.MaxTTL <= 0 {
+			return nil, fmt.Errorf("policy %d (%q): max_ttl must be greater than zero", i, p.Name)
+		}
+		key := p.Subject + "\x00" + p.Target
+		if first, dup := seen[key]; dup {
+			return nil, fmt.Errorf("policy %d (%q): duplicate (subject, target) pair already defined by policy %d", i, p.Name, first)
+		}
+		seen[key] = i
 	}
 	return &Loader{policies: f.Policies}, nil
 }
