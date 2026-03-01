@@ -1,5 +1,7 @@
 # svid-exchange
 
+![CI](https://github.com/ngaddam369/svid-exchange/actions/workflows/ci.yml/badge.svg)
+
 A Zero Trust token exchange service. Services present a SPIFFE SVID (via mTLS) and receive a scoped, short-lived ES256 JWT in return — eliminating static shared secrets between microservices.
 
 ```
