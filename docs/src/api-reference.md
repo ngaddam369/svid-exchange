@@ -67,7 +67,7 @@ grpcurl \
 
 ### GET /health/live
 
-Liveness probe. Returns `200 OK` as long as the process is running.
+Liveness probe. Returns `200 OK` so long as the process is running.
 
 ```bash
 curl http://localhost:8081/health/live
