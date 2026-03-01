@@ -6,7 +6,7 @@
 # Shared volume layout:
 #   spire-sockets/
 #     join-token        written by spire-init, read by spire-agent
-#     agent.sock        written by spire-agent, read by svid-exchange (task 22)
+#     agent.sock        written by spire-agent, read by svid-exchange
 #
 # Image notes:
 #   spire-server/agent official images are distroless (no shell, no wget).
@@ -15,11 +15,8 @@
 #   spire-server runs as root (user: "0") so it can write to named volumes
 #   that Docker creates owned by root — dev only, not for production.
 #
-# Prerequisites:
-#   make dev-certs   — generate dev/certs/ before first run
-#
 # Usage:
-#   docker compose up --build
+#   make compose-up
 #   docker compose down -v   # -v removes named volumes (clean slate)
 
 name: svid-exchange-dev
@@ -92,23 +89,20 @@ services:
 
   # ── svid-exchange ─────────────────────────────────────────────────────────────
   # Built from the local Dockerfile (scratch image).
-  # Still uses static dev/certs/ for mTLS — dynamic Workload API reloading
-  # is task 22; the socket volume is pre-mounted so that change is additive.
+  # mTLS certs are fetched live from the SPIRE Workload API — no static cert
+  # files needed. SVID rotation is transparent: no restart required.
   svid-exchange:
     build:
       context: .
       dockerfile: Dockerfile
     environment:
-      POLICY_FILE:   /config/policy.example.yaml
-      TLS_CERT_FILE: /certs/server.crt
-      TLS_KEY_FILE:  /certs/server.key
-      TLS_CA_FILE:   /certs/ca.crt
-      GRPC_ADDR:     ":8080"
-      HEALTH_ADDR:   ":8081"
+      POLICY_FILE:            /config/policy.example.yaml
+      SPIFFE_ENDPOINT_SOCKET: "unix:///opt/spire/sockets/agent.sock"
+      GRPC_ADDR:              ":8080"
+      HEALTH_ADDR:            ":8081"
     volumes:
-      - ./dev/certs:/certs:ro
       - ./config/policy.example.yaml:/config/policy.example.yaml:ro
-      - spire-sockets:/opt/spire/sockets   # pre-mounted; used by task 22
+      - spire-sockets:/opt/spire/sockets
     ports:
       - "8080:8080"   # gRPC (mTLS)
       - "8081:8081"   # health HTTP

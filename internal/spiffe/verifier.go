@@ -25,10 +25,9 @@ var (
 // certificate. It returns an error if no SPIFFE URI is found.
 //
 // Cert authenticity is guaranteed by the mTLS handshake at the transport layer
-// (buildMTLSConfig in cmd/server/main.go) — only certs signed by the trusted CA
-// reach this point. This function performs structural SPIFFE ID validation only.
-// When SPIRE is integrated, the CA supplied to buildMTLSConfig will be the SPIRE
-// workload API trust bundle, replacing the static TLS_CA_FILE.
+// (workloadapi.X509Source in cmd/server/main.go) — only certs signed by the
+// SPIRE trust bundle reach this point. This function performs structural
+// SPIFFE ID validation only.
 func ExtractID(ctx context.Context) (string, error) {
 	p, ok := peer.FromContext(ctx)
 	if !ok {

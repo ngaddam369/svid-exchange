@@ -15,59 +15,110 @@ caller (SVID)  →  svid-exchange  →  scoped JWT  →  target service
 ## Prerequisites
 
 - Go 1.26 (managed via [mise](https://mise.jdx.dev))
-- `openssl` (for dev cert generation)
 - `golangci-lint` v2.10.1
-- Docker + Docker Compose (for the full SPIRE dev environment)
+- Docker + Docker Compose
 
 ## Running locally
-
-```bash
-make run-local
-```
-
-Runs the full verification checklist (build → vet → lint → test), generates dev certs if absent, then starts the server with mTLS on `:8080` and health endpoints on `:8081`.
-
-### Full SPIRE dev environment
 
 ```bash
 make compose-up
 ```
 
-Runs the verification checklist, then starts SPIRE Server + Agent + svid-exchange via Docker Compose. Workload entries matching `config/policy.example.yaml` are registered automatically.
+Runs the full verification checklist (build → vet → lint → test), then starts SPIRE Server + Agent + svid-exchange via Docker Compose. Workload entries matching `config/policy.example.yaml` are registered automatically. mTLS certificates are fetched live from the SPIRE Workload API — no static cert files needed, and SVID rotation is transparent.
 
-```bash
-make compose-down   # stop all services and wipe named volumes (clean slate)
-docker compose logs -f   # tail logs while running
+When the stack is ready, svid-exchange logs:
+
+```
+{"message":"mTLS via SPIRE Workload API","socket":"unix:///opt/spire/sockets/agent.sock"}
+{"message":"gRPC listening","addr":":8080"}
+{"message":"health HTTP listening","addr":":8081"}
 ```
 
-Environment variables (all optional, shown with defaults):
+Confirm it is healthy:
+
+```bash
+curl -s http://localhost:8081/health/ready   # → 200 OK
+```
+
+Other useful commands while the stack is running:
+
+```bash
+docker compose logs -f svid-exchange   # tail service logs
+make compose-down                      # stop all services and wipe named volumes (clean slate)
+```
+
+Environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
+| `SPIFFE_ENDPOINT_SOCKET` | *(required)* | UNIX socket path to the SPIRE Workload API (e.g. `unix:///opt/spire/sockets/agent.sock`) |
 | `POLICY_FILE` | `config/policy.example.yaml` | Path to policy YAML |
 | `GRPC_ADDR` | `:8080` | gRPC listen address |
 | `HEALTH_ADDR` | `:8081` | Health HTTP listen address |
 
-`TLS_CERT_FILE`, `TLS_KEY_FILE`, and `TLS_CA_FILE` must be set — the server refuses to start without them. `make run-local` sets these automatically using the dev certs.
-
 ## Testing a token exchange
 
-After `make run-local`, use [grpcurl](https://github.com/fullstorydev/grpcurl) with the dev client cert:
+Requires [grpcurl](https://github.com/fullstorydev/grpcurl). All steps assume `make compose-up` is running.
+
+### 1. Fetch a client SVID from the SPIRE agent
+
+The SPIRE agent issues X.509 SVIDs to attested workloads. For local testing, fetch one directly from inside the agent container (it runs as root, matching the `unix:uid:0` selector registered for every dev workload entry):
 
 ```bash
+docker exec svid-exchange-dev-spire-agent-1 mkdir -p /tmp/svid
+
+docker exec svid-exchange-dev-spire-agent-1 \
+  spire-agent api fetch x509 \
+    -socketPath /opt/spire/sockets/agent.sock \
+    -write /tmp/svid/
+
+docker cp svid-exchange-dev-spire-agent-1:/tmp/svid/. /tmp/svid/
+```
+
+This writes one `svid.N.pem` / `svid.N.key` / `bundle.N.pem` triple per registered workload entry. The SPIFFE ID for each index is printed to stdout during the fetch — check the output to see which file maps to which identity.
+
+### 2. Send an exchange request
+
+Use `-insecure` to skip server-side hostname verification — SPIFFE SVIDs carry a URI SAN (`spiffe://…`), not a DNS name, so standard hostname checking does not apply. The server still enforces full mTLS: it rejects any connection that does not present a valid SPIRE-issued client certificate.
+
+```bash
+# order → payment (policy: order-to-payment)
 grpcurl \
-  -cacert dev/certs/ca.crt \
-  -cert dev/certs/client.crt \
-  -key dev/certs/client.key \
+  -insecure \
+  -cert /tmp/svid/svid.0.pem \
+  -key  /tmp/svid/svid.0.key \
   -d '{
     "target_service": "spiffe://cluster.local/ns/default/sa/payment",
     "scopes": ["payments:charge", "payments:refund"],
-    "ttl_seconds": 300
+    "ttl_seconds": 120
   }' \
   localhost:8080 exchange.v1.TokenExchange/Exchange
 ```
 
-The response contains a signed JWT, its expiry, the granted scopes, and a `token_id` (JTI) for future replay protection.
+Expected response:
+
+```json
+{
+  "token": "<ES256 JWT>",
+  "expiresAt": "<unix timestamp>",
+  "grantedScopes": ["payments:charge", "payments:refund"],
+  "tokenId": "<uuid>"
+}
+```
+
+The audit log in `docker compose logs svid-exchange` shows the corresponding `token.exchange` event with `"granted":true`.
+
+### 3. Try other policy entries
+
+Match the SVID file to its SPIFFE ID using the fetch output, then swap in the corresponding cert and request body:
+
+| Subject | Target | Scopes |
+|---|---|---|
+| `order` | `payment` | `payments:charge`, `payments:refund` |
+| `warehouse` | `inventory` | `inventory:read`, `inventory:reserve` |
+| `api-gateway` | `order` | `orders:read`, `orders:create` |
+
+To test a denial, request a scope not listed in the policy — the server returns `PERMISSION_DENIED`.
 
 ## Policy
 
@@ -83,11 +134,8 @@ Policies are defined in YAML. See [`config/policy.example.yaml`](config/policy.e
 | `make vet` | Run go vet |
 | `make lint` | Run golangci-lint |
 | `make verify` | Full checklist: build → vet → lint → test |
-| `make run-local` | verify + dev-certs, then start the server with mTLS |
-| `make compose-up` | verify + dev-certs, then start SPIRE + svid-exchange via Docker Compose |
+| `make compose-up` | verify, then start SPIRE + svid-exchange via Docker Compose |
 | `make compose-down` | Stop all Compose services and remove named volumes |
-| `make dev-certs` | Generate self-signed dev certs (skips if present) |
-| `make dev-certs-clean` | Force-regenerate dev certs |
 | `make proto` | Regenerate Go code from `.proto` files |
 | `make tidy` | `go mod tidy` + `go mod verify` |
 | `make clean` | Remove build artifacts (`bin/`) |

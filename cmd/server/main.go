@@ -4,9 +4,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +14,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
@@ -36,6 +36,9 @@ const (
 
 func main() {
 	log := zerolog.New(os.Stdout).With().Timestamp().Str("service", "svid-exchange").Logger()
+
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
 
 	policyPath := os.Getenv("POLICY_FILE")
 	if policyPath == "" {
@@ -69,23 +72,28 @@ func main() {
 	auditLog := audit.New(os.Stdout)
 
 	// --- gRPC server ---
-	// mTLS is mandatory — TLS_CERT_FILE, TLS_KEY_FILE, TLS_CA_FILE must all be set.
-	// The service cannot start without them: identity extraction depends on the
-	// peer certificate presented during the TLS handshake.
-	tlsCert := os.Getenv("TLS_CERT_FILE")
-	tlsKey := os.Getenv("TLS_KEY_FILE")
-	tlsCA := os.Getenv("TLS_CA_FILE")
-
-	if tlsCert == "" || tlsKey == "" || tlsCA == "" {
-		log.Fatal().Msg("TLS_CERT_FILE, TLS_KEY_FILE, and TLS_CA_FILE must all be set — plaintext mode is not supported")
+	// mTLS is mandatory — the service is SPIFFE-native.
+	// SPIFFE_ENDPOINT_SOCKET must point to the SPIRE Workload API socket.
+	// X509Source fetches and rotates the SVID automatically; every TLS
+	// handshake picks up the latest certificate without a process restart.
+	spiffeSocket := os.Getenv("SPIFFE_ENDPOINT_SOCKET")
+	if spiffeSocket == "" {
+		log.Fatal().Msg("SPIFFE_ENDPOINT_SOCKET must be set")
 	}
 
-	tlsConfig, err := buildMTLSConfig(tlsCert, tlsKey, tlsCA)
+	src, err := workloadapi.NewX509Source(
+		rootCtx,
+		workloadapi.WithClientOptions(workloadapi.WithAddr(spiffeSocket)),
+	)
 	if err != nil {
-		log.Fatal().Err(err).Msg("build mTLS config")
+		log.Fatal().Err(err).Str("socket", spiffeSocket).Msg("connect to SPIRE Workload API")
 	}
-	serverOpts := []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsConfig))}
-	log.Info().Msg("mTLS enabled")
+
+	tlsCfg := tlsconfig.MTLSServerConfig(src, src, tlsconfig.AuthorizeAny())
+	tlsCfg.MinVersion = tls.VersionTLS13
+
+	serverOpts := []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsCfg))}
+	log.Info().Str("socket", spiffeSocket).Msg("mTLS via SPIRE Workload API")
 
 	grpcServer := grpc.NewServer(serverOpts...)
 	svc := server.New(spiffe.Extractor{}, pl, minter, auditLog)
@@ -141,41 +149,17 @@ func main() {
 
 	log.Info().Msg("shutting down")
 	ready.Store(false)
+	rootCancel()              // stop Workload API watcher
+	grpcServer.GracefulStop() // drain in-flight RPCs (source still serves from cache)
+	if err := src.Close(); err != nil {
+		log.Error().Err(err).Msg("close X509Source")
+	}
 
-	grpcServer.GracefulStop()
-
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-	if err := healthServer.Shutdown(ctx); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+	if err := healthServer.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("health server shutdown error")
 	}
 
 	log.Info().Msg("stopped")
-}
-
-// buildMTLSConfig creates a TLS config requiring client certificate verification
-// against the provided CA. This is the transport-layer complement to the
-// SPIFFE ID extraction done at the application layer in spiffe/verifier.go.
-func buildMTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, fmt.Errorf("load server key pair: %w", err)
-	}
-
-	caPEM, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, fmt.Errorf("read CA cert: %w", err)
-	}
-
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("parse CA cert: no valid certificates found")
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    pool,
-		MinVersion:   tls.VersionTLS13,
-	}, nil
 }
