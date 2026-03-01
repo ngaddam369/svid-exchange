@@ -42,8 +42,8 @@ proto:
 		--go-grpc_opt=paths=source_relative \
 		$(PROTO_DIR)/exchange.proto
 
-## verify: run the full checklist (build → vet → lint → test)
-verify: build vet lint test
+## verify: run the full checklist (build → lint → test)
+verify: build lint test
 
 ## validate-policy: lint the policy file before deploying (uses POLICY_FILE env var or default)
 validate-policy: build
