@@ -4,7 +4,9 @@
 package policy
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"slices"
 
@@ -40,7 +42,33 @@ func LoadFile(path string) (*Loader, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parse policy file: %w", err)
 	}
+	if len(f.Policies) == 0 {
+		return nil, errors.New("policy file contains no policies")
+	}
+	for i, p := range f.Policies {
+		if err := validateSPIFFEID(p.Subject); err != nil {
+			return nil, fmt.Errorf("policy %d (%q): invalid subject: %w", i, p.Name, err)
+		}
+		if err := validateSPIFFEID(p.Target); err != nil {
+			return nil, fmt.Errorf("policy %d (%q): invalid target: %w", i, p.Name, err)
+		}
+	}
 	return &Loader{policies: f.Policies}, nil
+}
+
+// validateSPIFFEID checks that id is a well-formed SPIFFE ID (spiffe://<trust-domain>/...).
+func validateSPIFFEID(id string) error {
+	u, err := url.Parse(id)
+	if err != nil {
+		return fmt.Errorf("parse URI: %w", err)
+	}
+	if u.Scheme != "spiffe" {
+		return fmt.Errorf("scheme must be \"spiffe\", got %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return errors.New("missing trust domain")
+	}
+	return nil
 }
 
 // EvalResult is returned by Evaluate.

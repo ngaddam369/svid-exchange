@@ -108,35 +108,6 @@ func TestMint(t *testing.T) {
 		}
 	})
 
-	t.Run("TTL capping", func(t *testing.T) {
-		tests := []struct {
-			name    string
-			ttl     int32
-			wantTTL int64
-		}{
-			{"within cap", 300, 300},
-			{"at cap", maxTTLCap, maxTTLCap},
-			{"exceeds cap", maxTTLCap + 1, maxTTLCap},
-			{"zero uses cap", 0, maxTTLCap},
-			{"negative uses cap", -1, maxTTLCap},
-		}
-
-		for _, tc := range tests {
-			t.Run(tc.name, func(t *testing.T) {
-				result, err := m.Mint("spiffe://a", "spiffe://b", []string{"s:r"}, tc.ttl)
-				if err != nil {
-					t.Fatalf("Mint: %v", err)
-				}
-				claims := parseClaims(t, m, result.Token)
-				iat, _ := claims["iat"].(float64)
-				exp, _ := claims["exp"].(float64)
-				if gotTTL := int64(exp) - int64(iat); gotTTL != tc.wantTTL {
-					t.Errorf("TTL = %d, want %d", gotTTL, tc.wantTTL)
-				}
-			})
-		}
-	})
-
 	t.Run("scope claim lists all granted scopes", func(t *testing.T) {
 		result, err := m.Mint("spiffe://a", "spiffe://b", []string{"payments:charge"}, 60)
 		if err != nil {

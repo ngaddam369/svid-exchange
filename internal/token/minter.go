@@ -13,10 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	issuer    = "svid-exchange"
-	maxTTLCap = 3600 // hard ceiling: 1 hour regardless of policy
-)
+const issuer = "svid-exchange"
 
 // Minter signs JWTs with an ES256 private key.
 type Minter struct {
@@ -52,12 +49,8 @@ type MintResult struct {
 }
 
 // Mint signs a JWT for the given subject/target/scopes/ttl.
-// ttlSeconds is capped to maxTTLCap.
+// ttlSeconds must be positive; the policy layer is responsible for enforcing the ceiling.
 func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32) (MintResult, error) {
-	if ttlSeconds <= 0 || ttlSeconds > maxTTLCap {
-		ttlSeconds = maxTTLCap
-	}
-
 	jti := uuid.New().String()
 	now := time.Now().UTC()
 	exp := now.Add(time.Duration(ttlSeconds) * time.Second)

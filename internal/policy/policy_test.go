@@ -166,6 +166,21 @@ func TestEvaluate(t *testing.T) {
 	}
 }
 
+func writeTemp(t *testing.T, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "policy-*.yaml")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	if _, err := f.WriteString(content); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close temp file: %v", err)
+	}
+	return f.Name()
+}
+
 func TestLoadFile(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -180,17 +195,39 @@ func TestLoadFile(t *testing.T) {
 		{
 			name: "invalid YAML",
 			setup: func(t *testing.T) string {
-				f, err := os.CreateTemp(t.TempDir(), "policy-*.yaml")
-				if err != nil {
-					t.Fatalf("create temp file: %v", err)
-				}
-				if _, err := f.WriteString("{{{{ not valid yaml"); err != nil {
-					t.Fatalf("write temp file: %v", err)
-				}
-				if err := f.Close(); err != nil {
-					t.Fatalf("close temp file: %v", err)
-				}
-				return f.Name()
+				return writeTemp(t, "{{{{ not valid yaml")
+			},
+		},
+		{
+			name: "empty policies list",
+			setup: func(t *testing.T) string {
+				return writeTemp(t, "policies: []\n")
+			},
+		},
+		{
+			name: "invalid subject SPIFFE ID",
+			setup: func(t *testing.T) string {
+				return writeTemp(t, `
+policies:
+  - name: bad-subject
+    subject: "http://not-spiffe/workload"
+    target:  "spiffe://cluster.local/ns/default/sa/payment"
+    allowed_scopes: ["s:r"]
+    max_ttl: 60
+`)
+			},
+		},
+		{
+			name: "invalid target SPIFFE ID",
+			setup: func(t *testing.T) string {
+				return writeTemp(t, `
+policies:
+  - name: bad-target
+    subject: "spiffe://cluster.local/ns/default/sa/order"
+    target:  "spiffe:/missing-trust-domain"
+    allowed_scopes: ["s:r"]
+    max_ttl: 60
+`)
 			},
 		},
 	}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -100,13 +101,14 @@ func main() {
 	}
 
 	// --- Health HTTP server ---
-	ready := true // ready once policy + minter are initialised (already done above)
+	var ready atomic.Bool
+	ready.Store(true) // ready once policy + minter are initialised (already done above)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, _ *http.Request) {
-		if ready {
+		if ready.Load() {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -138,7 +140,7 @@ func main() {
 	<-quit
 
 	log.Info().Msg("shutting down")
-	ready = false
+	ready.Store(false)
 
 	grpcServer.GracefulStop()
 
