@@ -77,7 +77,7 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 			Granted:         false,
 			DenialReason:    fmt.Sprintf("no policy permits %s → %s", subjectID, req.TargetService),
 		})
-		return nil, status.Errorf(codes.PermissionDenied, "no policy permits %s to access %s", subjectID, req.TargetService)
+		return nil, status.Errorf(codes.PermissionDenied, "no policy permits %s → %s", subjectID, req.TargetService)
 	}
 
 	minted, err := s.minter.Mint(subjectID, req.TargetService, result.GrantedScopes, result.GrantedTTL)
