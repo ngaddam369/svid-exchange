@@ -155,6 +155,37 @@ svid-exchange will log:
 
 Make a few exchange requests, then open the Jaeger UI at `http://localhost:16686` and select the `svid-exchange` service to see the traces. Each `Exchange` RPC appears as a span with its operation name, latency, and gRPC status code.
 
+### 6. Enable rate limiting (optional)
+
+Rate limiting is opt-in. To activate it, pass `RATE_LIMIT_RPS` (and optionally `RATE_LIMIT_BURST`) when starting the stack:
+
+```bash
+RATE_LIMIT_RPS=2 RATE_LIMIT_BURST=2 docker compose up svid-exchange --build -d
+```
+
+svid-exchange will log:
+
+```
+{"message":"rate limiting enabled","rps":2,"burst":2}
+```
+
+Each SPIFFE ID gets its own independent token bucket. With the settings above, any identity is allowed 2 requests per second with a burst of 2. Requests that exceed the quota receive a `ResourceExhausted` gRPC error:
+
+```
+ERROR:
+  Code: ResourceExhausted
+  Message: rate limit exceeded for spiffe://cluster.local/ns/default/sa/order
+```
+
+The counter is tracked in Prometheus under the existing `grpc_server_handled_total` series:
+
+```bash
+curl -s http://localhost:8081/metrics | grep ResourceExhausted
+# grpc_server_handled_total{grpc_code="ResourceExhausted",...} 3
+```
+
+When `RATE_LIMIT_RPS` is unset or `0`, rate limiting is disabled and all requests pass through without any quota check. See [Configuration](configuration.md#environment-variables) for the full option reference.
+
 ## Make targets
 
 | Target | Description |

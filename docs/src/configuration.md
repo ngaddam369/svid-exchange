@@ -10,6 +10,8 @@
 | `HEALTH_ADDR` | `:8081` | No | Health + JWKS + Prometheus metrics HTTP listen address |
 | `GRPC_REFLECTION` | `true` | No | Set to `false` to disable gRPC server reflection (recommended for production) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | No | OTLP gRPC endpoint for trace export (e.g. `jaeger:4317`). When unset, a no-op tracer is used and no traces are collected. |
+| `RATE_LIMIT_RPS` | — | No | Max requests per second per SPIFFE ID (token bucket). Unset or `0` disables rate limiting. |
+| `RATE_LIMIT_BURST` | `RATE_LIMIT_RPS` | No | Burst capacity. Defaults to `RATE_LIMIT_RPS` rounded up when unset. |
 
 ## HTTP endpoints
 

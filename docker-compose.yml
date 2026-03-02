@@ -100,6 +100,8 @@ services:
       SPIFFE_ENDPOINT_SOCKET: "unix:///opt/spire/sockets/agent.sock"
       GRPC_ADDR:              ":8080"
       HEALTH_ADDR:            ":8081"
+      RATE_LIMIT_RPS:         "${RATE_LIMIT_RPS:-}"
+      RATE_LIMIT_BURST:       "${RATE_LIMIT_BURST:-}"
     volumes:
       - ./config/policy.example.yaml:/config/policy.example.yaml:ro
       - spire-sockets:/opt/spire/sockets

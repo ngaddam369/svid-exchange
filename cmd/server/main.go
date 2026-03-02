@@ -5,10 +5,12 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -80,6 +82,26 @@ func main() {
 		log.Info().Str("endpoint", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")).Msg("OTLP tracing enabled")
 	}
 
+	// --- Rate limiting ---
+	var rps float64
+	if v := os.Getenv("RATE_LIMIT_RPS"); v != "" {
+		if rps, err = strconv.ParseFloat(v, 64); err != nil {
+			log.Fatal().Err(err).Str("value", v).Msg("invalid RATE_LIMIT_RPS")
+		}
+	}
+	var burst int
+	if v := os.Getenv("RATE_LIMIT_BURST"); v != "" {
+		if burst, err = strconv.Atoi(v); err != nil {
+			log.Fatal().Err(err).Str("value", v).Msg("invalid RATE_LIMIT_BURST")
+		}
+	}
+	if burst <= 0 && rps > 0 {
+		burst = int(math.Ceil(rps))
+	}
+	if rps > 0 {
+		log.Info().Float64("rps", rps).Int("burst", burst).Msg("rate limiting enabled")
+	}
+
 	// --- gRPC server ---
 	// mTLS is mandatory — the service is SPIFFE-native.
 	// SPIFFE_ENDPOINT_SOCKET must point to the SPIRE Workload API socket.
@@ -102,9 +124,10 @@ func main() {
 	tlsCfg.MinVersion = tls.VersionTLS13
 
 	metricsInterceptor := initMetrics()
+	rateLimiter := newRateLimitInterceptor(rps, burst)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
-		grpc.UnaryInterceptor(metricsInterceptor),
+		grpc.UnaryInterceptor(chainUnary(metricsInterceptor, rateLimiter)),
 		newTracingServerOption(),
 	}
 	log.Info().Str("socket", spiffeSocket).Msg("mTLS via SPIRE Workload API")
