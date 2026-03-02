@@ -40,33 +40,12 @@ All series are pre-populated at zero on startup for the `Exchange` method, so al
 
 svid-exchange uses [OpenTelemetry](https://opentelemetry.io) for distributed tracing. Tracing is **opt-in** — the service runs normally without any trace backend configured.
 
-To enable tracing, point `OTEL_EXPORTER_OTLP_ENDPOINT` at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.):
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317
-```
-
-When enabled, every `Exchange` RPC produces a server span with:
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, every `Exchange` RPC produces a server span with:
 - Operation name: `exchange.v1.TokenExchange/Exchange`
 - W3C TraceContext propagation from incoming gRPC metadata (so upstream callers can link their spans)
 - Buffered export via OTLP gRPC with graceful flush on shutdown
 
-To run a local Jaeger instance alongside the stack:
-
-```bash
-docker run -d --name jaeger \
-  --network svid-exchange-dev_default \
-  -p 16686:16686 -p 4317:4317 \
-  jaegertracing/all-in-one:1.65.0
-```
-
-Then restart svid-exchange with the endpoint set:
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 docker compose up svid-exchange
-```
-
-Traces are visible at `http://localhost:16686`.
+Point the variable at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.). See [Getting Started](getting-started.md) for a local Jaeger setup.
 
 ## Policy file
 

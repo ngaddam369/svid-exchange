@@ -118,8 +118,6 @@ grpc_server_handling_seconds_count{...}                  5
 grpc_server_handling_seconds_sum{...}                    0.000845
 ```
 
-All series are pre-populated at zero on startup, so you can write alerting rules before the first call is made.
-
 ### 5. Enable distributed tracing (optional)
 
 Tracing is opt-in. To see traces locally, start a Jaeger instance on the same Docker network and restart svid-exchange with the OTLP endpoint set:

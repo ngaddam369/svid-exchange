@@ -63,7 +63,7 @@ grpcurl \
 ## HTTP endpoints
 
 **Address:** `:8081` (configurable via `HEALTH_ADDR`)
-**Transport:** plain HTTP — intended for internal infrastructure use only (health checks, key distribution).
+**Transport:** plain HTTP — intended for internal infrastructure use only (health checks, key distribution, metrics scraping).
 
 ### GET /health/live
 
@@ -79,6 +79,14 @@ Readiness probe. Returns `200 OK` when the service is ready to handle requests, 
 
 ```bash
 curl http://localhost:8081/health/ready
+```
+
+### GET /metrics
+
+Prometheus text exposition. Returns gRPC server metrics (`grpc_server_*` family) for scraping by Prometheus or any compatible collector. See [Configuration](configuration.md#prometheus-metrics) for the full metric list.
+
+```bash
+curl http://localhost:8081/metrics | grep "^grpc_server"
 ```
 
 ### GET /jwks
