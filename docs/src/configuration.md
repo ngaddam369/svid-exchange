@@ -9,6 +9,7 @@
 | `GRPC_ADDR` | `:8080` | No | gRPC listen address |
 | `HEALTH_ADDR` | `:8081` | No | Health + JWKS + Prometheus metrics HTTP listen address |
 | `GRPC_REFLECTION` | `true` | No | Set to `false` to disable gRPC server reflection (recommended for production) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | No | OTLP gRPC endpoint for trace export (e.g. `jaeger:4317`). When unset, a no-op tracer is used and no traces are collected. |
 
 ## HTTP endpoints
 
@@ -34,6 +35,38 @@ svid-exchange exposes standard gRPC server metrics via the `grpc_server_*` famil
 | `grpc_server_msg_sent_total` | Counter | Total response messages sent |
 
 All series are pre-populated at zero on startup for the `Exchange` method, so alerting rules work from day one without waiting for the first call.
+
+### Distributed tracing
+
+svid-exchange uses [OpenTelemetry](https://opentelemetry.io) for distributed tracing. Tracing is **opt-in** — the service runs normally without any trace backend configured.
+
+To enable tracing, point `OTEL_EXPORTER_OTLP_ENDPOINT` at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.):
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317
+```
+
+When enabled, every `Exchange` RPC produces a server span with:
+- Operation name: `exchange.v1.TokenExchange/Exchange`
+- W3C TraceContext propagation from incoming gRPC metadata (so upstream callers can link their spans)
+- Buffered export via OTLP gRPC with graceful flush on shutdown
+
+To run a local Jaeger instance alongside the stack:
+
+```bash
+docker run -d --name jaeger \
+  --network svid-exchange-dev_default \
+  -p 16686:16686 -p 4317:4317 \
+  jaegertracing/all-in-one:1.65.0
+```
+
+Then restart svid-exchange with the endpoint set:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 docker compose up svid-exchange
+```
+
+Traces are visible at `http://localhost:16686`.
 
 ## Policy file
 

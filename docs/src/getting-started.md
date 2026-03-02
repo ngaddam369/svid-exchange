@@ -120,6 +120,27 @@ grpc_server_handling_seconds_sum{...}                    0.000845
 
 All series are pre-populated at zero on startup, so you can write alerting rules before the first call is made.
 
+### 5. Enable distributed tracing (optional)
+
+Tracing is opt-in. To see traces locally, start a Jaeger instance on the same Docker network and restart svid-exchange with the OTLP endpoint set:
+
+```bash
+docker run -d --name jaeger \
+  --network svid-exchange-dev_default \
+  -p 16686:16686 -p 4317:4317 \
+  jaegertracing/all-in-one:1.65.0
+
+OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 docker compose up svid-exchange --build -d
+```
+
+svid-exchange will log:
+
+```
+{"message":"OTLP tracing enabled","endpoint":"jaeger:4317"}
+```
+
+Make a few exchange requests, then open the Jaeger UI at `http://localhost:16686` and select the `svid-exchange` service to see the traces. Each `Exchange` RPC appears as a span with its operation name, latency, and gRPC status code.
+
 ## Make targets
 
 | Target | Description |

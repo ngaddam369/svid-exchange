@@ -71,6 +71,15 @@ func main() {
 	// --- Audit logger ---
 	auditLog := audit.New(os.Stdout)
 
+	// --- Tracing ---
+	tracingShutdown, err := initTracing(rootCtx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("init tracing")
+	}
+	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
+		log.Info().Str("endpoint", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")).Msg("OTLP tracing enabled")
+	}
+
 	// --- gRPC server ---
 	// mTLS is mandatory — the service is SPIFFE-native.
 	// SPIFFE_ENDPOINT_SOCKET must point to the SPIRE Workload API socket.
@@ -96,6 +105,7 @@ func main() {
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
 		grpc.UnaryInterceptor(metricsInterceptor),
+		newTracingServerOption(),
 	}
 	log.Info().Str("socket", spiffeSocket).Msg("mTLS via SPIRE Workload API")
 
@@ -168,6 +178,9 @@ func main() {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
+	if err := tracingShutdown(shutdownCtx); err != nil {
+		log.Error().Err(err).Msg("flush traces")
+	}
 	if err := healthServer.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("health server shutdown error")
 	}
