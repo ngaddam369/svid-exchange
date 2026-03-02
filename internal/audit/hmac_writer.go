@@ -17,12 +17,12 @@ import (
 //
 //   - "seq"       — monotonically increasing counter; gaps indicate deleted lines.
 //   - "prev_hmac" — HMAC of the previous entry (all-zeros for the first entry);
-//                   chaining means any deletion or reordering breaks verification.
+//     chaining means any deletion or reordering breaks verification.
 //   - "hmac"      — HMAC-SHA256(key, uint64_be(seq) || prev_hmac || payload)
-//                   where payload is the original line bytes without the trailing
-//                   newline. Because the HMAC covers the payload before injection,
-//                   a verifier can reconstruct it by stripping the three injected
-//                   fields and re-adding the closing '}'.
+//     where payload is the original line bytes without the trailing
+//     newline. Because the HMAC covers the payload before injection,
+//     a verifier can reconstruct it by stripping the three injected
+//     fields and re-adding the closing '}'.
 //
 // When key is nil or empty, Write passes through to the underlying writer
 // unchanged — no fields are injected and no performance cost is incurred.
