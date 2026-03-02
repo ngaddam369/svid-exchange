@@ -23,6 +23,23 @@ This runs the full verification checklist (build → lint → test → policy va
 {"message":"health HTTP listening","addr":":8081"}
 ```
 
+To start with all opt-in security features enabled, generate the required keys first and pass them as environment variables:
+
+```bash
+# Generate a 32-byte HMAC key for audit log signing
+export AUDIT_HMAC_KEY=$(openssl rand -hex 32)
+
+# Start the stack with HMAC signing and rate limiting active
+AUDIT_HMAC_KEY=$AUDIT_HMAC_KEY RATE_LIMIT_RPS=10 RATE_LIMIT_BURST=10 docker compose up --build -d
+```
+
+With both features active, svid-exchange additionally logs:
+
+```
+{"message":"audit log HMAC signing enabled"}
+{"message":"rate limiting enabled","rps":10,"burst":10}
+```
+
 Confirm it is healthy:
 
 ```bash
@@ -155,7 +172,65 @@ svid-exchange will log:
 
 Make a few exchange requests, then open the Jaeger UI at `http://localhost:16686` and select the `svid-exchange` service to see the traces. Each `Exchange` RPC appears as a span with its operation name, latency, and gRPC status code.
 
-### 6. Enable rate limiting (optional)
+### 6. Enable audit log HMAC signing (optional)
+
+Audit log integrity is opt-in. Without it, log lines are plain JSON and can be silently tampered with or deleted. With HMAC signing enabled, every line gets three extra fields that provide cryptographic tamper evidence.
+
+#### How it works
+
+Each log line produced by zerolog is intercepted before being written to stdout. The service computes `HMAC-SHA256(key, uint64_be(seq) || prev_hmac || original_line)` and injects three fields:
+
+- `"seq"` — monotonically increasing counter; a gap (e.g. 1 → 3) means a line was deleted.
+- `"prev_hmac"` — HMAC of the previous entry (all-zeros for the first); chaining means any deletion or reordering also breaks the chain.
+- `"hmac"` — the HMAC over the current entry.
+
+Example signed line:
+
+```json
+{"level":"info","time":"...","event":"token.exchange","subject":"spiffe://...","granted":true,...,"seq":1,"prev_hmac":"0000...0000","hmac":"a1b2c3..."}
+```
+
+#### Generating a key
+
+```bash
+openssl rand -hex 32
+# outputs e.g.: a3f1b2c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2
+```
+
+#### Starting the stack with signing enabled
+
+```bash
+AUDIT_HMAC_KEY=a3f1b2c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2 docker compose up svid-exchange --build -d
+```
+
+svid-exchange will log:
+
+```
+{"message":"audit log HMAC signing enabled"}
+```
+
+#### Offline verification (pseudocode)
+
+```
+for each line in audit.log:
+    parse JSON → extract seq, prev_hmac, hmac, and all other fields
+    reconstruct original_line by removing the three injected fields
+    recompute = HMAC-SHA256(key, uint64_be(seq) || prev_hmac || original_line)
+    if recompute != hmac  → field-level tampering detected
+    if seq != previous_seq + 1  → line(s) deleted
+    if prev_hmac != previous_hmac  → chain broken (deletion or reordering)
+```
+
+#### Security concerns and known limitations
+
+| Concern | Status | Notes |
+|---------|--------|-------|
+| Field-level tampering | **Mitigated** | HMAC covers every field in the original line |
+| Line deletion / reordering | **Mitigated** | Chained `prev_hmac` + `seq` expose gaps |
+| Key compromise | **Operational** | If the attacker has the key, they can forge valid HMACs. Inject `AUDIT_HMAC_KEY` from a secrets manager (Vault, AWS Secrets Manager) at runtime — never store it alongside the logs |
+| Real-time prevention | **Out of scope** | This is tamper-*evidence*, not tamper-*prevention*. Preventing tampering requires writing to an external append-only store (WORM S3, Kafka, write-restricted syslog sink) — an infrastructure decision, not a code change |
+
+### 7. Enable rate limiting (optional)
 
 Rate limiting is opt-in. To activate it, pass `RATE_LIMIT_RPS` (and optionally `RATE_LIMIT_BURST`) when starting the stack:
 

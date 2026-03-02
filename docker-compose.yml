@@ -102,6 +102,7 @@ services:
       HEALTH_ADDR:            ":8081"
       RATE_LIMIT_RPS:         "${RATE_LIMIT_RPS:-}"
       RATE_LIMIT_BURST:       "${RATE_LIMIT_BURST:-}"
+      AUDIT_HMAC_KEY:         "${AUDIT_HMAC_KEY:-}"    # hex-encoded 32-byte key; unset = no signing
     volumes:
       - ./config/policy.example.yaml:/config/policy.example.yaml:ro
       - spire-sockets:/opt/spire/sockets

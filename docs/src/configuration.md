@@ -12,6 +12,7 @@
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | No | OTLP gRPC endpoint for trace export (e.g. `jaeger:4317`). When unset, a no-op tracer is used and no traces are collected. |
 | `RATE_LIMIT_RPS` | — | No | Max requests per second per SPIFFE ID (token bucket). Unset or `0` disables rate limiting. |
 | `RATE_LIMIT_BURST` | `RATE_LIMIT_RPS` | No | Burst capacity. Defaults to `RATE_LIMIT_RPS` rounded up when unset. |
+| `AUDIT_HMAC_KEY` | — | No | Hex-encoded 32-byte key for audit log HMAC signing. Must be exactly 64 hex characters. Unset disables signing. |
 
 ## HTTP endpoints
 

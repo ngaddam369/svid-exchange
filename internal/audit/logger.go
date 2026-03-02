@@ -19,6 +19,15 @@ func New(w io.Writer) *Logger {
 	}
 }
 
+// NewWithHMAC creates an audit Logger that appends HMAC-SHA256 tamper-evidence
+// fields ("seq", "prev_hmac", "hmac") to every log line. key must be 32 bytes.
+// When key is nil or empty, the logger behaves identically to New.
+func NewWithHMAC(w io.Writer, key []byte) *Logger {
+	return &Logger{
+		log: zerolog.New(newHMACWriter(w, key)).With().Timestamp().Logger(),
+	}
+}
+
 // ExchangeEvent is the payload for a token exchange audit log entry.
 type ExchangeEvent struct {
 	Subject         string

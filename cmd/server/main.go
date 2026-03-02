@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"math"
 	"net"
@@ -71,7 +72,17 @@ func main() {
 	}
 
 	// --- Audit logger ---
-	auditLog := audit.New(os.Stdout)
+	var auditKey []byte
+	if v := os.Getenv("AUDIT_HMAC_KEY"); v != "" {
+		if auditKey, err = hex.DecodeString(v); err != nil {
+			log.Fatal().Err(err).Msg("invalid AUDIT_HMAC_KEY: must be hex-encoded")
+		}
+		if len(auditKey) != 32 {
+			log.Fatal().Int("bytes", len(auditKey)).Msg("AUDIT_HMAC_KEY must be 32 bytes (64 hex chars)")
+		}
+		log.Info().Msg("audit log HMAC signing enabled")
+	}
+	auditLog := audit.NewWithHMAC(os.Stdout, auditKey)
 
 	// --- Tracing ---
 	tracingShutdown, err := initTracing(rootCtx)
