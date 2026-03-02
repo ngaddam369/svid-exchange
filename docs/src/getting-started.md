@@ -37,7 +37,9 @@ make compose-down
 
 ## Testing a token exchange
 
-### 1. Fetch a client SVID
+### 1. Fetch SVIDs for all registered workloads
+
+Fetch all X.509 SVIDs from the SPIRE Agent and copy them to the host:
 
 ```bash
 docker exec svid-exchange-dev-spire-agent-1 mkdir -p /tmp/svid
@@ -50,25 +52,39 @@ docker exec svid-exchange-dev-spire-agent-1 \
 docker cp svid-exchange-dev-spire-agent-1:/tmp/svid/. /tmp/svid/
 ```
 
-The fetch writes one `svid.N.pem` / `svid.N.key` / `bundle.N.pem` triple per registered workload entry. The index-to-identity mapping is not guaranteed — inspect the certificate SAN to find the file for the identity you want to test as:
+The fetch writes one `svid.N.pem` / `svid.N.key` / `bundle.N.pem` triple per registered workload entry. The index-to-identity mapping is not stable across fetches — build the full map in one pass using the URI SAN in each certificate:
 
 ```bash
-openssl x509 -in /tmp/svid/svid.0.pem -noout -ext subjectAltName
-# X509v3 Subject Alternative Name:
-#     URI:spiffe://cluster.local/ns/default/sa/warehouse
+for pem in /tmp/svid/svid.*.pem; do
+  idx=$(basename "$pem" .pem | sed 's/svid\.//')
+  id=$(openssl x509 -in "$pem" -noout -ext subjectAltName 2>/dev/null \
+       | grep -o 'URI:.*' | sed 's/URI://')
+  printf "svid.%s  →  %s\n" "$idx" "$id"
+done
 ```
 
-Repeat for each index until you find the one matching your intended subject.
+Example output for the dev stack (order varies):
+
+```
+svid.0  →  spiffe://cluster.local/ns/default/sa/api-gateway
+svid.1  →  spiffe://cluster.local/ns/default/sa/inventory
+svid.2  →  spiffe://cluster.local/ns/default/sa/payment
+svid.3  →  spiffe://cluster.local/ns/default/sa/order
+svid.4  →  spiffe://cluster.local/ns/default/sa/warehouse
+svid.5  →  spiffe://cluster.local/ns/default/sa/svid-exchange
+```
+
+Use the index that maps to the identity you want to test as in the next step.
 
 ### 2. Send an exchange request
 
-Once you've identified the index for the identity you want to test as, pass the corresponding cert and key. For example, if `svid.5.pem` is the `order` workload, use it to request a token targeting the `payment` service:
+Pass the cert and key for the identity you want to test as. Using the example map above, `svid.3` is `order` — use it to request a token targeting `payment`:
 
 ```bash
 grpcurl \
   -insecure \
-  -cert /tmp/svid/svid.5.pem \
-  -key  /tmp/svid/svid.5.key \
+  -cert /tmp/svid/svid.3.pem \
+  -key  /tmp/svid/svid.3.key \
   -d '{
     "target_service": "spiffe://cluster.local/ns/default/sa/payment",
     "scopes": ["payments:charge", "payments:refund"],
@@ -77,7 +93,7 @@ grpcurl \
   localhost:8080 exchange.v1.TokenExchange/Exchange
 ```
 
-Replace `svid.5` with whatever index corresponds to `order` in your fetch output.
+Replace `svid.3` with whatever index your map shows for `order`.
 
 Expected response:
 

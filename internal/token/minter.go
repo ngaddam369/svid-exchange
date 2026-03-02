@@ -30,8 +30,8 @@ func NewMinter() (*Minter, error) {
 	return &Minter{key: key}, nil
 }
 
-// NewMinterFromKey creates a Minter using an existing key (for tests).
-func NewMinterFromKey(key *ecdsa.PrivateKey) *Minter {
+// newMinterFromKey creates a Minter from an existing key.
+func newMinterFromKey(key *ecdsa.PrivateKey) *Minter {
 	return &Minter{key: key}
 }
 

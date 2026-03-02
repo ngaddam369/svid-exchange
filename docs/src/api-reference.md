@@ -46,10 +46,12 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 #### Example (grpcurl)
 
 ```bash
+# Replace svid.N with the index for the 'order' workload.
+# See Getting Started for how to identify the correct index.
 grpcurl \
   -insecure \
-  -cert /tmp/svid/svid.0.pem \
-  -key  /tmp/svid/svid.0.key \
+  -cert /tmp/svid/svid.N.pem \
+  -key  /tmp/svid/svid.N.key \
   -d '{
     "target_service": "spiffe://cluster.local/ns/default/sa/payment",
     "scopes": ["payments:charge"],

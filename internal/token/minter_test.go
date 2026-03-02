@@ -17,7 +17,7 @@ func newTestMinter(t *testing.T) *Minter {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	return NewMinterFromKey(key)
+	return newMinterFromKey(key)
 }
 
 func parseClaims(t *testing.T, m *Minter, tokenStr string) jwt.MapClaims {
