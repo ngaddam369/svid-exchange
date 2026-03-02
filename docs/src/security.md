@@ -47,6 +47,14 @@ Tokens issued by svid-exchange are ES256 JWTs with the following security proper
 
 The signing key is an ephemeral ES256 key pair generated at startup. The corresponding public key is served at `/jwks` for downstream verification.
 
+## Rate limiting
+
+Rate limiting is a second line of defence that operates independently of the policy layer. The policy controls *what* a workload may access; rate limiting controls *how often* it may ask.
+
+Each SPIFFE ID gets its own independent token bucket. A compromised or misbehaving workload can only exhaust its own quota — other identities are unaffected. Requests that exceed the quota are rejected with `ResourceExhausted` before the policy or minting logic runs.
+
+Rate limiting is opt-in via `RATE_LIMIT_RPS` and `RATE_LIMIT_BURST`. See [Rate Limiting](features/rate-limiting.md) for full configuration details and known limitations.
+
 ## Audit logging
 
 Every exchange attempt is logged to stdout as structured JSON, regardless of outcome.
@@ -80,6 +88,24 @@ Every exchange attempt is logged to stdout as structured JSON, regardless of out
   "denial_reason": "no policy permits spiffe://.../order → spiffe://.../inventory"
 }
 ```
+
+### Audit log integrity
+
+Plain JSON logs can be silently modified or deleted. When `AUDIT_HMAC_KEY` is set, each line is signed with HMAC-SHA256 and chained to the previous entry — any tampering or deletion is detectable offline.
+
+```json
+{
+  "level": "info",
+  "time": "...",
+  "event": "token.exchange",
+  "granted": false,
+  "seq": 2,
+  "prev_hmac": "6ecad2e0...",
+  "hmac": "9a8fa214..."
+}
+```
+
+See [Audit Log Integrity](features/audit-log-integrity.md) for how the signing works, how to verify logs offline, and the known limitations (key management, real-time prevention).
 
 ## gRPC reflection
 
