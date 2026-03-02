@@ -7,8 +7,33 @@
 | `SPIFFE_ENDPOINT_SOCKET` | — | Yes | UNIX socket path to the SPIRE Workload API (e.g. `unix:///opt/spire/sockets/agent.sock`) |
 | `POLICY_FILE` | `config/policy.example.yaml` | No | Path to the policy YAML file |
 | `GRPC_ADDR` | `:8080` | No | gRPC listen address |
-| `HEALTH_ADDR` | `:8081` | No | Health + JWKS HTTP listen address |
+| `HEALTH_ADDR` | `:8081` | No | Health + JWKS + Prometheus metrics HTTP listen address |
 | `GRPC_REFLECTION` | `true` | No | Set to `false` to disable gRPC server reflection (recommended for production) |
+
+## HTTP endpoints
+
+All HTTP endpoints are served on `HEALTH_ADDR` (default `:8081`).
+
+| Path | Description |
+|------|-------------|
+| `/health/live` | Liveness probe — always returns `200 OK` while the process is running |
+| `/health/ready` | Readiness probe — returns `200 OK` when policy and minter are initialised; `503` during shutdown |
+| `/jwks` | JSON Web Key Set — public signing key for downstream JWT verification (RFC 7517) |
+| `/metrics` | Prometheus text exposition — gRPC request counts, status codes, and latency histograms |
+
+### Prometheus metrics
+
+svid-exchange exposes standard gRPC server metrics via the `grpc_server_*` family:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `grpc_server_started_total` | Counter | Total RPCs received |
+| `grpc_server_handled_total` | Counter | Total RPCs completed, labelled by `grpc_code` (e.g. `OK`, `PermissionDenied`) |
+| `grpc_server_handling_seconds` | Histogram | RPC latency with buckets from 5ms to 10s |
+| `grpc_server_msg_received_total` | Counter | Total request messages received |
+| `grpc_server_msg_sent_total` | Counter | Total response messages sent |
+
+All series are pre-populated at zero on startup for the `Exchange` method, so alerting rules work from day one without waiting for the first call.
 
 ## Policy file
 

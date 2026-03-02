@@ -100,6 +100,26 @@ Expected response:
 
 To test a denial, request a scope not listed in the policy. The server returns `PERMISSION_DENIED` and logs a denial event.
 
+### 4. Observe Prometheus metrics
+
+After making one or more exchange requests, query the `/metrics` endpoint to see counters and latency data:
+
+```bash
+curl -s http://localhost:8081/metrics | grep "^grpc_server"
+```
+
+Key series to watch:
+
+```
+grpc_server_started_total{...}                           5
+grpc_server_handled_total{grpc_code="OK",...}            3
+grpc_server_handled_total{grpc_code="PermissionDenied",...} 2
+grpc_server_handling_seconds_count{...}                  5
+grpc_server_handling_seconds_sum{...}                    0.000845
+```
+
+All series are pre-populated at zero on startup, so you can write alerting rules before the first call is made.
+
 ## Make targets
 
 | Target | Description |

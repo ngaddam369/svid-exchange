@@ -92,12 +92,17 @@ func main() {
 	tlsCfg := tlsconfig.MTLSServerConfig(src, src, tlsconfig.AuthorizeAny())
 	tlsCfg.MinVersion = tls.VersionTLS13
 
-	serverOpts := []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsCfg))}
+	metricsInterceptor := initMetrics()
+	serverOpts := []grpc.ServerOption{
+		grpc.Creds(credentials.NewTLS(tlsCfg)),
+		grpc.UnaryInterceptor(metricsInterceptor),
+	}
 	log.Info().Str("socket", spiffeSocket).Msg("mTLS via SPIRE Workload API")
 
 	grpcServer := grpc.NewServer(serverOpts...)
 	svc := server.New(spiffe.Extractor{}, pl, minter, auditLog)
 	exchangev1.RegisterTokenExchangeServer(grpcServer, svc)
+	registerMetrics(grpcServer)
 
 	if os.Getenv("GRPC_REFLECTION") != "false" {
 		reflection.Register(grpcServer)
@@ -127,6 +132,7 @@ func main() {
 		log.Fatal().Err(err).Msg("build JWKS handler")
 	}
 	mux.HandleFunc("/jwks", jwksH)
+	mux.Handle("/metrics", newMetricsHandler())
 	healthServer := &http.Server{
 		Addr:    healthAddr,
 		Handler: mux,
