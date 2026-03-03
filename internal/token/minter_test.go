@@ -4,6 +4,9 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +134,77 @@ func TestMint(t *testing.T) {
 				t.Fatalf("duplicate jti after %d mints", i)
 			}
 			seen[r.TokenID] = true
+		}
+	})
+}
+
+func TestTokenValidation(t *testing.T) {
+	m := newTestMinter(t)
+
+	t.Run("tampered payload is rejected", func(t *testing.T) {
+		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/target", []string{"r:w"}, 60)
+		if err != nil {
+			t.Fatalf("Mint: %v", err)
+		}
+
+		parts := strings.SplitN(result.Token, ".", 3)
+		if len(parts) != 3 {
+			t.Fatalf("expected 3 JWT parts, got %d", len(parts))
+		}
+
+		// Decode the payload, mutate the sub claim, re-encode.
+		// The original signature no longer covers the modified bytes.
+		raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		var payloadClaims map[string]any
+		if err = json.Unmarshal(raw, &payloadClaims); err != nil {
+			t.Fatalf("unmarshal payload: %v", err)
+		}
+		payloadClaims["sub"] = "spiffe://cluster.local/attacker"
+		modified, err := json.Marshal(payloadClaims)
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+		parts[1] = base64.RawURLEncoding.EncodeToString(modified)
+		tamperedToken := strings.Join(parts, ".")
+
+		_, err = jwt.Parse(tamperedToken, func(tok *jwt.Token) (any, error) {
+			return m.PublicKey(), nil
+		})
+		if !errors.Is(err, jwt.ErrTokenSignatureInvalid) {
+			t.Errorf("expected ErrTokenSignatureInvalid, got %v", err)
+		}
+	})
+
+	t.Run("token for wrong audience is rejected", func(t *testing.T) {
+		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/service-a", []string{"r:w"}, 60)
+		if err != nil {
+			t.Fatalf("Mint: %v", err)
+		}
+
+		_, err = jwt.Parse(result.Token, func(tok *jwt.Token) (any, error) {
+			return m.PublicKey(), nil
+		}, jwt.WithAudience("spiffe://cluster.local/service-b"))
+		if !errors.Is(err, jwt.ErrTokenInvalidAudience) {
+			t.Errorf("expected ErrTokenInvalidAudience, got %v", err)
+		}
+	})
+
+	t.Run("expired token is rejected", func(t *testing.T) {
+		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/target", []string{"r:w"}, 1)
+		if err != nil {
+			t.Fatalf("Mint: %v", err)
+		}
+
+		time.Sleep(1100 * time.Millisecond)
+
+		_, err = jwt.Parse(result.Token, func(tok *jwt.Token) (any, error) {
+			return m.PublicKey(), nil
+		})
+		if !errors.Is(err, jwt.ErrTokenExpired) {
+			t.Errorf("expected ErrTokenExpired, got %v", err)
 		}
 	})
 }

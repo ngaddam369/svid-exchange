@@ -21,7 +21,7 @@ type Minter struct {
 }
 
 // NewMinter generates an ephemeral ES256 key pair. In production, load the key
-// from a secrets manager or KMS (see TODO.md — Key Management).
+// from a secrets manager or KMS.
 func NewMinter() (*Minter, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
