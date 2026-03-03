@@ -84,6 +84,30 @@ func newValidReq() *exchangev1.ExchangeRequest {
 	}
 }
 
+func TestContextCancellation(t *testing.T) {
+	t.Run("cancelled before policy eval returns Canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), okMinter(), mockAudit{})
+		_, err := svc.Exchange(ctx, newValidReq())
+		if status.Code(err) != codes.Canceled {
+			t.Errorf("code = %v, want Canceled", status.Code(err))
+		}
+	})
+
+	t.Run("deadline exceeded before policy eval returns DeadlineExceeded", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
+		defer cancel()
+
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), okMinter(), mockAudit{})
+		_, err := svc.Exchange(ctx, newValidReq())
+		if status.Code(err) != codes.DeadlineExceeded {
+			t.Errorf("code = %v, want DeadlineExceeded", status.Code(err))
+		}
+	})
+}
+
 func TestReplayAndRevocation(t *testing.T) {
 	t.Run("duplicate JTI is rejected with AlreadyExists", func(t *testing.T) {
 		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), okMinter(), mockAudit{})

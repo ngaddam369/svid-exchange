@@ -78,6 +78,10 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 		return nil, status.Error(codes.InvalidArgument, "at least one scope is required")
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, status.FromContextError(err).Err()
+	}
+
 	result := s.policy.Evaluate(subjectID, req.TargetService, req.Scopes, req.TtlSeconds)
 	if !result.Allowed {
 		s.audit.LogExchange(audit.ExchangeEvent{
@@ -88,6 +92,10 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 			DenialReason:    fmt.Sprintf("no policy permits %s → %s", subjectID, req.TargetService),
 		})
 		return nil, status.Errorf(codes.PermissionDenied, "no policy permits %s → %s", subjectID, req.TargetService)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, status.FromContextError(err).Err()
 	}
 
 	minted, err := s.minter.Mint(subjectID, req.TargetService, result.GrantedScopes, result.GrantedTTL)
