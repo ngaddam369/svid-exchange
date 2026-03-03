@@ -64,6 +64,7 @@ func main() {
 		log.Fatal().Err(err).Str("path", policyPath).Msg("load policy")
 	}
 	log.Info().Str("path", policyPath).Msg("policy loaded")
+	ap := newAtomicPolicy(pl)
 
 	// --- Token minter ---
 	minter, err := token.NewMinter()
@@ -144,7 +145,7 @@ func main() {
 	log.Info().Str("socket", spiffeSocket).Msg("mTLS via SPIRE Workload API")
 
 	grpcServer := grpc.NewServer(serverOpts...)
-	svc := server.New(spiffe.Extractor{}, pl, minter, auditLog)
+	svc := server.New(spiffe.Extractor{}, ap, minter, auditLog)
 	exchangev1.RegisterTokenExchangeServer(grpcServer, svc)
 	registerMetrics(grpcServer)
 
@@ -182,6 +183,28 @@ func main() {
 		Handler: mux,
 	}
 
+	// --- Policy hot-reload ---
+	// Send SIGHUP to reload the policy file without restarting the process.
+	// If the new file is invalid the existing policy stays active.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for {
+			select {
+			case <-hup:
+				newPolicy, loadErr := policy.LoadFile(policyPath)
+				if loadErr != nil {
+					log.Error().Err(loadErr).Str("path", policyPath).Msg("policy reload failed, keeping existing policy")
+					continue
+				}
+				ap.swap(newPolicy)
+				log.Info().Str("path", policyPath).Msg("policy reloaded")
+			case <-rootCtx.Done():
+				return
+			}
+		}
+	}()
+
 	// --- Start ---
 	go func() {
 		log.Info().Str("addr", grpcAddr).Msg("gRPC listening")
@@ -204,7 +227,8 @@ func main() {
 
 	log.Info().Msg("shutting down")
 	ready.Store(false)
-	rootCancel()              // stop Workload API watcher
+	signal.Stop(hup)
+	rootCancel()              // stop Workload API watcher + SIGHUP goroutine
 	grpcServer.GracefulStop() // drain in-flight RPCs (source still serves from cache)
 	if err := src.Close(); err != nil {
 		log.Error().Err(err).Msg("close X509Source")

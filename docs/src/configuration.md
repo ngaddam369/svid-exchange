@@ -87,6 +87,28 @@ The server (and the `svid-exchange-validate` CLI) reject policy files that conta
 - A `max_ttl` of zero or negative
 - Duplicate `(subject, target)` pairs (the second rule would be silently unreachable)
 
+### Hot-reload
+
+Send `SIGHUP` to reload the policy file without restarting the process:
+
+```bash
+kill -HUP $(pidof svid-exchange)
+```
+
+On a successful reload, the server logs:
+
+```
+{"message":"policy reloaded","path":"config/policy.yaml"}
+```
+
+If the new file fails validation, the existing policy stays active and an error is logged — no requests are disrupted:
+
+```
+{"level":"error","message":"policy reload failed, keeping existing policy","error":"..."}
+```
+
+The swap is atomic: in-flight requests finish against the old policy, and all subsequent requests see the new policy immediately. There is no window where a request can observe a partially-loaded policy.
+
 ### Linting without starting the server
 
 ```bash
