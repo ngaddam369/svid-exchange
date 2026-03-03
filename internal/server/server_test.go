@@ -76,6 +76,64 @@ func deniedPolicy() mockPolicy {
 
 // --- tests ---
 
+func newValidReq() *exchangev1.ExchangeRequest {
+	return &exchangev1.ExchangeRequest{
+		TargetService: "spiffe://cluster.local/ns/default/sa/payment",
+		Scopes:        []string{"payments:charge"},
+		TtlSeconds:    300,
+	}
+}
+
+func TestReplayAndRevocation(t *testing.T) {
+	t.Run("duplicate JTI is rejected with AlreadyExists", func(t *testing.T) {
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), okMinter(), mockAudit{})
+
+		_, err := svc.Exchange(context.Background(), newValidReq())
+		if err != nil {
+			t.Fatalf("first exchange failed: %v", err)
+		}
+
+		_, err = svc.Exchange(context.Background(), newValidReq())
+		if status.Code(err) != codes.AlreadyExists {
+			t.Errorf("second exchange: code = %v, want AlreadyExists", status.Code(err))
+		}
+	})
+
+	t.Run("revoked JTI is rejected with PermissionDenied", func(t *testing.T) {
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), okMinter(), mockAudit{})
+
+		svc.Revoke("test-jti")
+
+		_, err := svc.Exchange(context.Background(), newValidReq())
+		if status.Code(err) != codes.PermissionDenied {
+			t.Errorf("revoked exchange: code = %v, want PermissionDenied", status.Code(err))
+		}
+	})
+
+	t.Run("expired JTI is not treated as a replay", func(t *testing.T) {
+		// Mint with TTL=1; after expiry the cache entry is swept and a second
+		// exchange with the same JTI is allowed again.
+		shortMinter := mockMinter{result: token.MintResult{
+			Token:     "signed-jwt",
+			TokenID:   "short-lived-jti",
+			ExpiresAt: time.Now().Add(1 * time.Second),
+		}}
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 1), shortMinter, mockAudit{})
+
+		_, err := svc.Exchange(context.Background(), newValidReq())
+		if err != nil {
+			t.Fatalf("first exchange failed: %v", err)
+		}
+
+		time.Sleep(1100 * time.Millisecond)
+
+		_, err = svc.Exchange(context.Background(), newValidReq())
+		if err != nil {
+			t.Errorf("post-expiry exchange failed: %v", err)
+		}
+	})
+}
+
 func TestExchange(t *testing.T) {
 	tests := []struct {
 		name       string

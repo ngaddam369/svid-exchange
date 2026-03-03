@@ -45,9 +45,28 @@ Tokens issued by svid-exchange are ES256 JWTs with the following security proper
 | **Audience** | Bound to a specific target SPIFFE ID — token cannot be replayed to a different service |
 | **Scopes** | Limited to what the policy allows — caller cannot escalate |
 | **TTL** | Capped by `max_ttl` in policy — no long-lived tokens |
-| **JTI** | Unique UUID per token — enables future replay detection |
+| **JTI** | Unique UUID per token — tracked server-side to detect replays |
 
 The signing key is an ephemeral ES256 key pair generated at startup. The corresponding public key is served at `/jwks` for downstream verification.
+
+## Replay protection
+
+After a token is minted, its `jti` (JWT ID) is recorded in an in-memory cache keyed by `jti → expiry`. On every subsequent `Exchange()` call, the freshly minted `jti` is checked against this cache before the response is returned:
+
+- **New `jti`** — recorded in the cache and the token is returned normally.
+- **Already-seen `jti`** — the call is rejected with `AlreadyExists`. No token is returned and no audit entry is written.
+
+Cache entries are lazily swept when they expire, so the cache stays bounded to the set of currently-valid tokens. No background goroutine is required.
+
+In practice, `jti` values are random UUIDs and collisions are statistically impossible. The cache acts as a defence-in-depth layer that catches hypothetical minter bugs or future non-UUID JTI schemes before they reach callers.
+
+## Token revocation
+
+A runtime revocation list complements the replay cache. An explicitly revoked `jti` is denied permanently — even within its original TTL — regardless of whether it has been seen before.
+
+The check runs before the replay cache: if the freshly minted `jti` is on the revocation list, the call returns `PermissionDenied`.
+
+The revocation list is populated via `server.Revoke(jti string)`. The list starts empty and lives only in memory; entries are not persisted across restarts. A future admin API will provide an external interface to manage it at runtime.
 
 ## Rate limiting
 

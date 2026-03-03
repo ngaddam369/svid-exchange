@@ -42,6 +42,8 @@ type TokenExchangeServer struct {
 	policy    PolicyEvaluator
 	minter    TokenMinter
 	audit     AuditLogger
+	cache     *jtiCache
+	revoked   *revocationList
 }
 
 // New creates a TokenExchangeServer from its dependencies.
@@ -51,7 +53,15 @@ func New(e IDExtractor, p PolicyEvaluator, m TokenMinter, a AuditLogger) *TokenE
 		policy:    p,
 		minter:    m,
 		audit:     a,
+		cache:     newJTICache(),
+		revoked:   newRevocationList(),
 	}
+}
+
+// Revoke adds jti to the server's revocation list. Any subsequent exchange
+// that produces the same token ID is rejected with codes.PermissionDenied.
+func (s *TokenExchangeServer) Revoke(jti string) {
+	s.revoked.Revoke(jti)
 }
 
 // Exchange validates the caller's SVID, applies policy, and mints a token.
@@ -83,6 +93,13 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 	minted, err := s.minter.Mint(subjectID, req.TargetService, result.GrantedScopes, result.GrantedTTL)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "mint token: %v", err)
+	}
+
+	if s.revoked.isRevoked(minted.TokenID) {
+		return nil, status.Error(codes.PermissionDenied, "token id has been revoked")
+	}
+	if s.cache.alreadyIssued(minted.TokenID, minted.ExpiresAt) {
+		return nil, status.Error(codes.AlreadyExists, "token id already issued")
 	}
 
 	s.audit.LogExchange(audit.ExchangeEvent{

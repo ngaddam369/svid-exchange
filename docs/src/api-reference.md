@@ -40,7 +40,8 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 | `OK` | Exchange successful |
 | `UNAUTHENTICATED` | No valid SPIFFE ID found in the peer certificate |
 | `INVALID_ARGUMENT` | `target_service` is empty, or no scopes were requested |
-| `PERMISSION_DENIED` | No policy permits this subject → target exchange |
+| `PERMISSION_DENIED` | No policy permits this subject → target exchange, or the minted token ID has been revoked |
+| `ALREADY_EXISTS` | The minted token ID was already issued (replay detected) |
 | `RESOURCE_EXHAUSTED` | Per-identity rate limit exceeded (only when `RATE_LIMIT_RPS` is set) |
 | `INTERNAL` | JWT signing failed (should not occur in normal operation) |
 
