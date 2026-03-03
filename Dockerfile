@@ -26,7 +26,9 @@ COPY config/policy.example.yaml /config/policy.example.yaml
 ENV POLICY_FILE=/config/policy.example.yaml
 ENV GRPC_ADDR=:8080
 ENV HEALTH_ADDR=:8081
+ENV ADMIN_ADDR=:8082
+ENV POLICY_DB=/data/policy.db
 
-EXPOSE 8080 8081
+EXPOSE 8080 8081 8082
 
 ENTRYPOINT ["/svid-exchange"]

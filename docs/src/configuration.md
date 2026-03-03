@@ -13,6 +13,8 @@
 | `RATE_LIMIT_RPS` | — | No | Max requests per second per SPIFFE ID (token bucket). Unset or `0` disables rate limiting. |
 | `RATE_LIMIT_BURST` | `RATE_LIMIT_RPS` | No | Burst capacity. Defaults to `RATE_LIMIT_RPS` rounded up when unset. |
 | `AUDIT_HMAC_KEY` | — | No | Hex-encoded 32-byte key for audit log HMAC signing. Must be exactly 64 hex characters. Unset disables signing. |
+| `ADMIN_ADDR` | `:8082` | No | Admin gRPC listen address for the dynamic policy API. Should be network-restricted to administrative clients only. |
+| `POLICY_DB` | `data/policy.db` | No | Path to the BoltDB file used to persist dynamic policies created via the admin API. The parent directory is created automatically. |
 
 ## HTTP endpoints
 

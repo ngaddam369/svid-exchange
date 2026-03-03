@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"syscall"
@@ -23,17 +24,20 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/ngaddam369/svid-exchange/internal/admin"
 	"github.com/ngaddam369/svid-exchange/internal/audit"
 	"github.com/ngaddam369/svid-exchange/internal/policy"
 	"github.com/ngaddam369/svid-exchange/internal/server"
 	"github.com/ngaddam369/svid-exchange/internal/spiffe"
 	"github.com/ngaddam369/svid-exchange/internal/token"
+	adminv1 "github.com/ngaddam369/svid-exchange/proto/admin/v1"
 	exchangev1 "github.com/ngaddam369/svid-exchange/proto/exchange/v1"
 )
 
 const (
 	defaultGRPCAddr   = ":8080"
 	defaultHealthAddr = ":8081"
+	defaultAdminAddr  = ":8082"
 	shutdownTimeout   = 10 * time.Second
 )
 
@@ -58,6 +62,11 @@ func main() {
 		healthAddr = defaultHealthAddr
 	}
 
+	adminAddr := os.Getenv("ADMIN_ADDR")
+	if adminAddr == "" {
+		adminAddr = defaultAdminAddr
+	}
+
 	// --- Policy ---
 	pl, err := policy.LoadFile(policyPath)
 	if err != nil {
@@ -65,6 +74,26 @@ func main() {
 	}
 	log.Info().Str("path", policyPath).Msg("policy loaded")
 	ap := newAtomicPolicy(pl)
+
+	// --- Policy store (BoltDB) ---
+	// Dynamic policies added via the admin API are persisted here and merged
+	// with the YAML base on startup and after every SIGHUP reload.
+	policyDBPath := os.Getenv("POLICY_DB")
+	if policyDBPath == "" {
+		policyDBPath = "data/policy.db"
+	}
+	if err := os.MkdirAll(filepath.Dir(policyDBPath), 0o700); err != nil {
+		log.Fatal().Err(err).Str("path", policyDBPath).Msg("create policy db directory")
+	}
+	store, err := policy.OpenStore(policyDBPath)
+	if err != nil {
+		log.Fatal().Err(err).Str("path", policyDBPath).Msg("open policy store")
+	}
+	log.Info().Str("path", policyDBPath).Msg("policy store opened")
+	// Merge YAML base with any dynamic policies persisted from a previous run.
+	if err := ap.rebuild(store); err != nil {
+		log.Fatal().Err(err).Msg("merge policy store")
+	}
 
 	// --- Token minter ---
 	minter, err := token.NewMinter()
@@ -158,6 +187,21 @@ func main() {
 		log.Fatal().Err(err).Str("addr", grpcAddr).Msg("listen gRPC")
 	}
 
+	// --- Admin gRPC server ---
+	// Separate listener on ADMIN_ADDR so it can be network-restricted
+	// independently of the data-plane gRPC port.
+	// Uses the same mTLS credentials as the data-plane server.
+	adminServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)))
+	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap)
+	adminv1.RegisterPolicyAdminServer(adminServer, adminSvc)
+	if os.Getenv("GRPC_REFLECTION") != "false" {
+		reflection.Register(adminServer)
+	}
+	adminLis, err := net.Listen("tcp", adminAddr)
+	if err != nil {
+		log.Fatal().Err(err).Str("addr", adminAddr).Msg("listen admin gRPC")
+	}
+
 	// --- Health HTTP server ---
 	var ready atomic.Bool
 	ready.Store(true) // ready once policy + minter are initialised (already done above)
@@ -186,6 +230,7 @@ func main() {
 	// --- Policy hot-reload ---
 	// Send SIGHUP to reload the policy file without restarting the process.
 	// If the new file is invalid the existing policy stays active.
+	// Dynamic policies from the store are preserved across reloads.
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	go func() {
@@ -197,7 +242,11 @@ func main() {
 					log.Error().Err(loadErr).Str("path", policyPath).Msg("policy reload failed, keeping existing policy")
 					continue
 				}
-				ap.swap(newPolicy)
+				ap.setBase(newPolicy.Policies())
+				if rebuildErr := ap.rebuild(store); rebuildErr != nil {
+					log.Error().Err(rebuildErr).Msg("policy rebuild failed after reload, keeping existing policy")
+					continue
+				}
 				log.Info().Str("path", policyPath).Msg("policy reloaded")
 			case <-rootCtx.Done():
 				return
@@ -210,6 +259,13 @@ func main() {
 		log.Info().Str("addr", grpcAddr).Msg("gRPC listening")
 		if err := grpcServer.Serve(grpcLis); err != nil {
 			log.Error().Err(err).Msg("gRPC serve error")
+		}
+	}()
+
+	go func() {
+		log.Info().Str("addr", adminAddr).Msg("admin gRPC listening")
+		if err := adminServer.Serve(adminLis); err != nil {
+			log.Error().Err(err).Msg("admin gRPC serve error")
 		}
 	}()
 
@@ -228,8 +284,12 @@ func main() {
 	log.Info().Msg("shutting down")
 	ready.Store(false)
 	signal.Stop(hup)
-	rootCancel()              // stop Workload API watcher + SIGHUP goroutine
-	grpcServer.GracefulStop() // drain in-flight RPCs (source still serves from cache)
+	rootCancel()               // stop Workload API watcher + SIGHUP goroutine
+	grpcServer.GracefulStop()  // drain in-flight RPCs (source still serves from cache)
+	adminServer.GracefulStop() // drain in-flight admin RPCs
+	if err := store.Close(); err != nil {
+		log.Error().Err(err).Msg("close policy store")
+	}
 	if err := src.Close(); err != nil {
 		log.Error().Err(err).Msg("close X509Source")
 	}

@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package admin.v1;
+
+option go_package = "github.com/ngaddam369/svid-exchange/proto/admin/v1;adminv1";
+
+// PolicyAdmin manages exchange policies at runtime.
+// Changes take effect immediately and persist across server restarts.
+// This service must be network-restricted — it should not be reachable
+// from workloads that consume the TokenExchange API.
+service PolicyAdmin {
+  // CreatePolicy adds a new exchange policy.
+  // Returns ALREADY_EXISTS if the policy name or (subject, target) pair
+  // conflicts with an existing YAML or dynamic policy.
+  rpc CreatePolicy(CreatePolicyRequest) returns (CreatePolicyResponse);
+
+  // DeletePolicy removes a dynamic policy by name.
+  // Returns NOT_FOUND if the policy does not exist in the dynamic store.
+  // Returns FAILED_PRECONDITION if the policy was loaded from the YAML file
+  // (YAML policies can only be removed by editing the file and sending SIGHUP).
+  rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
+
+  // ListPolicies returns all active policies — both YAML-sourced and dynamic.
+  // Each entry includes a source field ("yaml" or "dynamic") so callers can
+  // distinguish policies that originated from the file versus the API.
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+}
+
+// PolicyRule mirrors the YAML policy structure.
+message PolicyRule {
+  // name is the unique human-readable identifier used in audit logs.
+  string name = 1;
+
+  // subject is the SPIFFE ID of the calling service.
+  string subject = 2;
+
+  // target is the SPIFFE ID of the target service.
+  string target = 3;
+
+  // allowed_scopes is the complete set of scopes this subject may request.
+  repeated string allowed_scopes = 4;
+
+  // max_ttl is the maximum token lifetime in seconds.
+  int32 max_ttl = 5;
+}
+
+message CreatePolicyRequest {
+  PolicyRule rule = 1;
+}
+
+message CreatePolicyResponse {
+  PolicyRule rule = 1;
+}
+
+message DeletePolicyRequest {
+  string name = 1;
+}
+
+message DeletePolicyResponse {}
+
+message ListPoliciesRequest {}
+
+// PolicyEntry wraps a rule with its origin.
+message PolicyEntry {
+  PolicyRule rule = 1;
+
+  // source is either "yaml" or "dynamic".
+  string source = 2;
+}
+
+message ListPoliciesResponse {
+  repeated PolicyEntry policies = 1;
+}

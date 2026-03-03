@@ -1,7 +1,8 @@
-BINARY     := svid-exchange
-MODULE     := github.com/ngaddam369/svid-exchange
-PROTO_DIR  := proto/exchange/v1
-GEN_DIR    := proto/exchange/v1
+BINARY          := svid-exchange
+MODULE          := github.com/ngaddam369/svid-exchange
+PROTO_DIR       := proto/exchange/v1
+GEN_DIR         := proto/exchange/v1
+ADMIN_PROTO_DIR := proto/admin/v1
 
 .PHONY: build test lint proto verify validate-policy docs-build compose-up compose-down clean tidy
 
@@ -27,7 +28,8 @@ proto:
 		--go_opt=paths=source_relative \
 		--go-grpc_out=. \
 		--go-grpc_opt=paths=source_relative \
-		$(PROTO_DIR)/exchange.proto
+		$(PROTO_DIR)/exchange.proto \
+		$(ADMIN_PROTO_DIR)/admin.proto
 
 ## docs-build: build the mdBook documentation site (skipped if mdbook is not installed)
 docs-build:

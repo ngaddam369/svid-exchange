@@ -1,6 +1,6 @@
 # API Reference
 
-## gRPC service
+## Data-plane gRPC service
 
 **Service:** `exchange.v1.TokenExchange`
 
@@ -60,6 +60,114 @@ grpcurl \
     "ttl_seconds": 300
   }' \
   localhost:8080 exchange.v1.TokenExchange/Exchange
+```
+
+---
+
+---
+
+## Admin gRPC service
+
+**Service:** `admin.v1.PolicyAdmin`
+
+**Address:** `:8082` (configurable via `ADMIN_ADDR`)
+
+**Transport:** mTLS required — same SPIRE-issued certificates as the data-plane port.
+
+> **Restrict this port.** The admin service can add and delete policies. It must not be reachable from workloads that consume the `TokenExchange` API. Use a firewall rule, Kubernetes `NetworkPolicy`, or a separate network interface to limit access to administrative clients only.
+
+### CreatePolicy
+
+Adds a new dynamic policy. Takes effect immediately and survives server restarts.
+
+```protobuf
+rpc CreatePolicy(CreatePolicyRequest) returns (CreatePolicyResponse);
+```
+
+**Request fields (`PolicyRule`):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Unique human-readable identifier (used in audit logs) |
+| `subject` | string | SPIFFE ID of the calling service |
+| `target` | string | SPIFFE ID of the target service |
+| `allowed_scopes` | repeated string | Scopes this subject may request for this target |
+| `max_ttl` | int32 | Maximum token lifetime in seconds |
+
+**Status codes:**
+
+| Code | Condition |
+|------|-----------|
+| `OK` | Policy created and active |
+| `INVALID_ARGUMENT` | Missing or invalid fields (empty name, bad SPIFFE ID, empty scopes, non-positive TTL) |
+| `ALREADY_EXISTS` | The policy name or `(subject, target)` pair already exists in the YAML file or dynamic store |
+
+#### Example (grpcurl)
+
+```bash
+grpcurl \
+  -insecure \
+  -cert /tmp/svid/svid.N.pem \
+  -key  /tmp/svid/svid.N.key \
+  -proto proto/admin/v1/admin.proto \
+  -d '{
+    "rule": {
+      "name": "order-to-inventory",
+      "subject": "spiffe://cluster.local/ns/default/sa/order",
+      "target":  "spiffe://cluster.local/ns/default/sa/inventory",
+      "allowed_scopes": ["inventory:read"],
+      "max_ttl": 60
+    }
+  }' \
+  localhost:8082 admin.v1.PolicyAdmin/CreatePolicy
+```
+
+### DeletePolicy
+
+Removes a dynamic policy by name. YAML-sourced policies cannot be deleted via the API — edit the YAML file and send `SIGHUP` instead.
+
+```protobuf
+rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
+```
+
+| Code | Condition |
+|------|-----------|
+| `OK` | Policy removed |
+| `INVALID_ARGUMENT` | Name is empty |
+| `NOT_FOUND` | No dynamic policy with that name exists |
+| `FAILED_PRECONDITION` | The policy was loaded from the YAML file |
+
+#### Example (grpcurl)
+
+```bash
+grpcurl \
+  -insecure \
+  -cert /tmp/svid/svid.N.pem \
+  -key  /tmp/svid/svid.N.key \
+  -proto proto/admin/v1/admin.proto \
+  -d '{"name": "order-to-inventory"}' \
+  localhost:8082 admin.v1.PolicyAdmin/DeletePolicy
+```
+
+### ListPolicies
+
+Returns all active policies — both YAML-sourced and dynamic — with a `source` field so callers can distinguish them.
+
+```protobuf
+rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+```
+
+Each entry in the response includes a `PolicyRule` and a `source` field: `"yaml"` for policies loaded from the file, `"dynamic"` for policies added via this API.
+
+#### Example (grpcurl)
+
+```bash
+grpcurl \
+  -insecure \
+  -cert /tmp/svid/svid.N.pem \
+  -key  /tmp/svid/svid.N.key \
+  -proto proto/admin/v1/admin.proto \
+  localhost:8082 admin.v1.PolicyAdmin/ListPolicies
 ```
 
 ---

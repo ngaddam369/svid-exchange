@@ -100,15 +100,19 @@ services:
       SPIFFE_ENDPOINT_SOCKET: "unix:///opt/spire/sockets/agent.sock"
       GRPC_ADDR:              ":8080"
       HEALTH_ADDR:            ":8081"
+      ADMIN_ADDR:             ":8082"
+      POLICY_DB:              "/data/policy.db"
       RATE_LIMIT_RPS:         "${RATE_LIMIT_RPS:-}"
       RATE_LIMIT_BURST:       "${RATE_LIMIT_BURST:-}"
       AUDIT_HMAC_KEY:         "${AUDIT_HMAC_KEY:-}"    # hex-encoded 32-byte key; unset = no signing
     volumes:
       - ./config/policy.example.yaml:/config/policy.example.yaml:ro
       - spire-sockets:/opt/spire/sockets
+      - policy-data:/data                              # BoltDB for dynamic policies
     ports:
       - "8080:8080"   # gRPC (mTLS)
       - "8081:8081"   # health HTTP
+      - "8082:8082"   # admin gRPC (restrict to trusted networks in production)
     depends_on:
       spire-agent:
         condition: service_healthy
@@ -117,3 +121,4 @@ volumes:
   spire-data:        # SPIRE server: SQLite database + signing keys
   spire-agent-data:  # SPIRE agent: attestation state
   spire-sockets:     # shared: join-token (init→agent), Workload API socket (agent→exchange)
+  policy-data:       # BoltDB file for dynamic policies added via admin API
