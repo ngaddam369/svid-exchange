@@ -165,5 +165,14 @@ Prometheus metrics are always-on — no configuration needed. See [Prometheus Me
 
 | Target | Description |
 |--------|-------------|
-| `make compose-up` | Run the full verification checklist, then start the Docker Compose stack |
-| `make compose-down` | Stop all services and remove named volumes |
+| `make build` | Compile the server binary (`bin/svid-exchange`) and the validate tool (`bin/svid-exchange-validate`) |
+| `make test` | Run all tests with the race detector and print a coverage summary |
+| `make lint` | Run `golangci-lint` — covers `govet`, `gofmt`, `staticcheck`, `errcheck`, and `unused` |
+| `make verify` | Full checklist: `build → lint → test → docs-build` |
+| `make proto` | Regenerate Go code from `.proto` files (requires `protoc`, `protoc-gen-go`, `protoc-gen-go-grpc`) |
+| `make validate-policy` | Lint the policy file without starting the server; respects `POLICY_FILE` env var |
+| `make docs-build` | Build the mdBook documentation site (silently skipped if `mdbook` is not installed) |
+| `make compose-up` | Run `verify + validate-policy`, then start the full Docker Compose stack |
+| `make compose-down` | Stop all services and remove named volumes (clean slate) |
+| `make clean` | Remove the `bin/` directory |
+| `make tidy` | Run `go mod tidy` and `go mod verify` |

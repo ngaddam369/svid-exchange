@@ -48,7 +48,7 @@ When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, every `Exchange` RPC produces a serve
 - W3C TraceContext propagation from incoming gRPC metadata (so upstream callers can link their spans)
 - Buffered export via OTLP gRPC with graceful flush on shutdown
 
-Point the variable at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.). See [Getting Started](getting-started.md) for a local Jaeger setup.
+Point the variable at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.). See [Distributed Tracing](features/distributed-tracing.md) for a local Jaeger setup.
 
 ## Policy file
 

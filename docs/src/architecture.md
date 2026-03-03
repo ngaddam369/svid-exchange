@@ -6,9 +6,10 @@
 |-----------|------|
 | **SPIRE Server** | Certificate authority; issues SVIDs to registered workloads |
 | **SPIRE Agent** | Node-local daemon; attests workloads and serves the Workload API |
-| **svid-exchange** | Token exchange service; validates identity, enforces policy, mints JWTs |
+| **svid-exchange (gRPC)** | Token exchange service on `:8080`; validates identity, enforces policy, mints JWTs |
+| **svid-exchange (HTTP)** | Health, JWKS, and metrics server on `:8081`; serves `/health/live`, `/health/ready`, `/jwks`, and `/metrics` |
 | **Caller service** | Any SPIFFE-registered microservice requesting a token |
-| **Target service** | The downstream service the caller wants to call |
+| **Target service** | The downstream service the caller wants to call; validates the JWT via `/jwks` |
 
 ## Token exchange flow
 

@@ -6,8 +6,23 @@ Microservices need to authenticate to each other. The challenge is doing so in a
 
 1. **Tied to the running workload** — identity should belong to the process, not to a human, config file, or long-lived secret.
 2. **Scoped** — a service should only be able to request the minimum permissions it needs for a specific operation, not a blanket token good for everything.
-3. **Auditable** — every access decision should be logged with enough context to answer: *who asked, for what, against whom, and was it granted?*
+3. **Auditable** — every access decision should be logged with enough context to answer: *who asked, for what, against whom, and was it granted?* This matters for SOC 2, PCI-DSS, and HIPAA compliance where attributable access records are required.
 4. **Short-lived** — credentials should expire quickly; rotation should be automatic, not operational.
+5. **Secret-free** — API keys in environment variables, shared passwords in config files, and service account credentials on fixed rotation schedules are all a liability. The goal is zero static secrets anywhere in the system.
+
+## mTLS vs token exchange
+
+A common question is: *if services already authenticate over mTLS with SPIFFE SVIDs, why do we need token exchange at all?*
+
+mTLS answers one question: **is this certificate valid?** It provides transport security and binary identity — the connection either passes the handshake or it doesn't. What mTLS does not provide is any concept of *what the caller is allowed to do* once identity is established.
+
+Think of it this way: mTLS is *showing your badge at the building entrance*. Token exchange is *getting a specific keycard that only opens the rooms you're authorised to enter today, valid for the next five minutes*.
+
+Concretely, token exchange adds:
+- **Per-operation scoping** — a token is valid only for the declared `target` and the intersection of requested and allowed `scopes`; the same service cannot reuse it for a different operation
+- **Audience binding** — the `aud` claim ties the token to a specific target SPIFFE ID; presenting it to any other service fails validation
+- **Blast radius reduction** — a compromised workload's SVID expires within hours automatically; any tokens it obtained are short-lived by policy
+- **Compliance auditability** — every token exchange is a logged, attributable event independent of the transport layer
 
 ## What already exists
 
@@ -67,7 +82,10 @@ The key design decisions and their rationale:
 |------------|--------|
 | Signing key is ephemeral (generated at startup) | KMS integration (AWS/GCP) is planned but not yet implemented |
 | Policy is static (file reload requires restart) | SIGHUP hot-reload and a dynamic policy API are planned but not yet implemented |
-| Rate limits are global, not per-target | Per-target limits require policy-file integration and are not yet implemented |
+| Rate limits are per-SPIFFE-ID, not per-target | Per-target limits require policy-file integration and are not yet implemented |
 | No replay protection | JTI cache with TTL eviction is planned but not yet implemented |
 | No token revocation | Revocation list is planned but not yet implemented |
 | Multi-replica rate limiting requires external state | Redis or sidecar integration is a future consideration |
+| No client middleware library | A Go package for token fetch, cache, and automatic refresh is planned; callers currently manage the exchange call themselves |
+| No token delegation | The `on_behalf_of` pattern (service acting with a user's reduced permissions) requires a proto change and is planned as a future extension |
+| No cloud IAM federation | Presenting a SPIFFE SVID directly to AWS STS or GCP Workload Identity to obtain short-lived cloud credentials is a planned extension of the client library |

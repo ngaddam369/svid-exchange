@@ -3,7 +3,7 @@ MODULE     := github.com/ngaddam369/svid-exchange
 PROTO_DIR  := proto/exchange/v1
 GEN_DIR    := proto/exchange/v1
 
-.PHONY: build test lint vet fmt proto verify validate-policy docs-build compose-up compose-down clean
+.PHONY: build test lint proto verify validate-policy docs-build compose-up compose-down clean tidy
 
 ## build: compile the server binary and validate tool
 build:
@@ -15,20 +15,7 @@ test:
 	go test -v -race -count=1 -coverprofile=coverage.out ./...
 	@go tool cover -func=coverage.out | grep -E "^total|^github"
 
-## fmt: check gofmt formatting (fail if unformatted files exist)
-fmt:
-	@unformatted=$$(gofmt -l .); \
-	if [ -n "$$unformatted" ]; then \
-		echo "unformatted files:"; \
-		echo "$$unformatted"; \
-		exit 1; \
-	fi
-
-## vet: run go vet
-vet:
-	go vet ./...
-
-## lint: run golangci-lint
+## lint: run golangci-lint (includes govet and gofmt checks)
 lint:
 	golangci-lint run ./...
 

@@ -10,6 +10,8 @@ In traditional microservice architectures, services authenticate to each other u
 - Are often over-scoped (a single key grants access to everything)
 - Cannot be tied to a specific workload identity
 - Are hard to audit — you can't tell *which instance* used a secret
+- Create secret sprawl across environments (dev, staging, prod each need their own copies)
+- Represent compliance risk — static credentials with no attributable identity make SOC 2, PCI-DSS, and HIPAA audit trails difficult to produce
 
 ## The Solution
 
@@ -28,6 +30,7 @@ caller (SVID)  →  svid-exchange  →  scoped JWT  →  target service
 - **Identity from transport** — caller identity comes from the mTLS certificate, not the request payload
 - **Policy-driven scoping** — explicit allow-list of (subject, target, scopes) tuples; denied by default
 - **Short-lived tokens** — TTL capped by policy; no long-lived credentials to rotate
-- **Audit trail** — every exchange (granted or denied) logged with full context
+- **Zero static secrets** — no API keys, no shared passwords, no rotation scripts; identity is the credential
+- **Audit trail** — every exchange (granted or denied) logged with full context; attributable to a specific workload for compliance purposes
 - **JWKS endpoint** — downstream services can verify tokens without out-of-band key distribution
 - **Dynamic SVID rotation** — SPIRE Workload API refreshes mTLS certificates automatically; no restarts needed

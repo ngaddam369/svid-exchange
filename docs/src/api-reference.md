@@ -41,6 +41,7 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 | `UNAUTHENTICATED` | No valid SPIFFE ID found in the peer certificate |
 | `INVALID_ARGUMENT` | `target_service` is empty, or no scopes were requested |
 | `PERMISSION_DENIED` | No policy permits this subject → target exchange |
+| `RESOURCE_EXHAUSTED` | Per-identity rate limit exceeded (only when `RATE_LIMIT_RPS` is set) |
 | `INTERNAL` | JWT signing failed (should not occur in normal operation) |
 
 #### Example (grpcurl)
@@ -130,3 +131,61 @@ Tokens minted by svid-exchange carry the following claims:
 | `iat` | Issued-at timestamp |
 | `exp` | Expiration timestamp |
 | `jti` | Unique token ID (UUID) |
+
+## JWT validation (target service)
+
+Target services must validate every incoming token. The following checks are required:
+
+| Check | Value to expect |
+|-------|----------------|
+| Signature | ES256 via the public key from `/jwks`; reject any other algorithm |
+| `iss` | `svid-exchange` |
+| `aud` | Must contain the target's own SPIFFE ID |
+| `exp` | Must be in the future |
+| `scope` | Space-separated; check that the required scope is present |
+
+### Fetching the public key
+
+Poll `/jwks` at startup and cache the response. Refresh when signature verification fails with an unknown `kid` — this covers key rotation without a fixed TTL.
+
+```bash
+curl http://svid-exchange:8081/jwks
+```
+
+The `kid` field (RFC 7638 SHA-256 thumbprint) uniquely identifies the key. A change in `kid` signals that a new signing key is active.
+
+### Go example
+
+Using [`github.com/golang-jwt/jwt/v5`](https://github.com/golang-jwt/jwt):
+
+```go
+import (
+    "strings"
+    "github.com/golang-jwt/jwt/v5"
+)
+
+// ecPub is *ecdsa.PublicKey fetched from /jwks
+keyFunc := func(t *jwt.Token) (any, error) {
+    if _, ok := t.Method.(*jwt.SigningMethodECDSA); !ok {
+        return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+    }
+    return ecPub, nil
+}
+
+token, err := jwt.Parse(rawToken, keyFunc,
+    jwt.WithIssuedAt(),
+    jwt.WithIssuer("svid-exchange"),
+    jwt.WithAudience("spiffe://cluster.local/ns/default/sa/payment"),
+)
+if err != nil {
+    // token is invalid, expired, wrong audience, etc.
+}
+
+claims := token.Claims.(jwt.MapClaims)
+scope, _ := claims["scope"].(string)
+
+// scope is space-separated: "payments:charge payments:refund"
+hasCharge := strings.Contains(" "+scope+" ", " payments:charge ")
+```
+
+**Important:** always pass `jwt.WithAudience(...)` set to your own service's SPIFFE ID. Without it, a token issued for a different target service will be accepted.

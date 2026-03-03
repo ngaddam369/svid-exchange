@@ -33,6 +33,8 @@ svid-exchange uses the SPIRE Workload API (`go-spiffe` `X509Source`) to:
 
 Every TLS handshake picks up the latest certificate. No process restart is needed when SVIDs rotate.
 
+The minimum TLS version is **TLS 1.3** (`tls.VersionTLS13`). TLS 1.2 and below are rejected at the handshake.
+
 ## JWT security properties
 
 Tokens issued by svid-exchange are ES256 JWTs with the following security properties:
