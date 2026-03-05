@@ -66,7 +66,7 @@ A runtime revocation list complements the replay cache. An explicitly revoked `j
 
 The check runs before the replay cache: if the freshly minted `jti` is on the revocation list, the call returns `PermissionDenied`.
 
-The revocation list is populated via `server.Revoke(jti string)`. The list starts empty and lives only in memory; entries are not persisted across restarts. A future admin API will provide an external interface to manage it at runtime.
+The revocation list is populated via `server.Revoke(jti string)`. The list starts empty and lives only in memory; entries are not persisted across restarts. A future endpoint on the admin service will provide an external interface to manage the revocation list at runtime.
 
 ## Rate limiting
 

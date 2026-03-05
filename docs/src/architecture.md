@@ -7,6 +7,7 @@
 | **SPIRE Server** | Certificate authority; issues SVIDs to registered workloads |
 | **SPIRE Agent** | Node-local daemon; attests workloads and serves the Workload API |
 | **svid-exchange (gRPC)** | Token exchange service on `:8080`; validates identity, enforces policy, mints JWTs |
+| **svid-exchange (Admin gRPC)** | Policy management service on `:8082`; creates, deletes, and lists dynamic policies via mTLS |
 | **svid-exchange (HTTP)** | Health, JWKS, and metrics server on `:8081`; serves `/health/live`, `/health/ready`, `/jwks`, and `/metrics` |
 | **Caller service** | Any SPIFFE-registered microservice requesting a token |
 | **Target service** | The downstream service the caller wants to call; validates the JWT via `/jwks` |
@@ -20,8 +21,9 @@ sequenceDiagram
     end
     box #D1FAE5 svid-exchange
     participant S as svid-exchange
-    participant P as Policy (YAML)
+    participant P as Policy (YAML + Dynamic)
     participant M as Minter (ES256)
+    participant R as Revocation + Replay cache
     end
     box #FEF3C7 Target
     participant T as Target Service
@@ -36,7 +38,10 @@ sequenceDiagram
     else allowed
         P-->>S: Allowed=true, granted scopes, TTL
         S->>M: Mint(subject, target, scopes, ttl)
-        M-->>S: Signed ES256 JWT
+        M-->>S: Signed ES256 JWT + jti
+        S->>R: Check revocation list and replay cache
+        Note over S,R: Returns PERMISSION_DENIED if jti is revoked,<br/>ALREADY_EXISTS if jti was already issued
+        R-->>S: Accepted — jti recorded in cache
         S-->>C: token + expires_at + granted_scopes + token_id
     end
     C->>T: Call with JWT in Authorization header

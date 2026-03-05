@@ -81,10 +81,8 @@ The key design decisions and their rationale:
 | Limitation | Status |
 |------------|--------|
 | Signing key is ephemeral (generated at startup) | KMS integration (AWS/GCP) is planned but not yet implemented |
-| Policy is static (file reload requires restart) | SIGHUP hot-reload and a dynamic policy API are planned but not yet implemented |
 | Rate limits are per-SPIFFE-ID, not per-target | Per-target limits require policy-file integration and are not yet implemented |
-| No replay protection | JTI cache with TTL eviction is planned but not yet implemented |
-| No token revocation | Revocation list is planned but not yet implemented |
+| In-memory revocation list is not persisted | Revoked JTIs are lost on restart; a persistent store and a runtime admin endpoint for managing revocations are planned |
 | Multi-replica rate limiting requires external state | Redis or sidecar integration is a future consideration |
 | No client middleware library | A Go package for token fetch, cache, and automatic refresh is planned; callers currently manage the exchange call themselves |
 | No token delegation | The `on_behalf_of` pattern (service acting with a user's reduced permissions) requires a proto change and is planned as a future extension |

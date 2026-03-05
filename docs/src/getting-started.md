@@ -20,6 +20,7 @@ This runs the full verification checklist (build → lint → test → policy va
 ```
 {"message":"mTLS via SPIRE Workload API","socket":"unix:///opt/spire/sockets/agent.sock"}
 {"message":"gRPC listening","addr":":8080"}
+{"message":"admin gRPC listening","addr":":8082"}
 {"message":"health HTTP listening","addr":":8081"}
 ```
 

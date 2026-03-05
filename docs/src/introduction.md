@@ -34,3 +34,7 @@ caller (SVID)  →  svid-exchange  →  scoped JWT  →  target service
 - **Audit trail** — every exchange (granted or denied) logged with full context; attributable to a specific workload for compliance purposes
 - **JWKS endpoint** — downstream services can verify tokens without out-of-band key distribution
 - **Dynamic SVID rotation** — SPIRE Workload API refreshes mTLS certificates automatically; no restarts needed
+- **Replay protection** — every minted JTI is tracked server-side; duplicate token IDs are rejected before reaching the caller
+- **Token revocation** — an in-memory revocation list permanently denies specific JTIs within their TTL
+- **Dynamic policy management** — add or remove policies at runtime via the admin gRPC API without restarting; changes are persisted in BoltDB and survive restarts
+- **Policy hot-reload** — send `SIGHUP` to reload the YAML policy file atomically; dynamic policies are preserved across reloads
