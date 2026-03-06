@@ -19,11 +19,15 @@ type mockExchanger struct {
 	mu        sync.Mutex
 	calls     int
 	expiresAt int64 // unix timestamp; 0 → now+300s
+	err       error // when non-nil, Exchange returns this error
 }
 
 func (m *mockExchanger) Exchange(_ context.Context, _ *exchangev1.ExchangeRequest, _ ...grpc.CallOption) (*exchangev1.ExchangeResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.err != nil {
+		return nil, m.err
+	}
 	m.calls++
 	exp := m.expiresAt
 	if exp == 0 {

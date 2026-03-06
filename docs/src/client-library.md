@@ -14,7 +14,9 @@ No new dependencies are needed. The package uses the same `go-spiffe/v2`, `grpc`
 
 **Caching.** Once a token is obtained, `Token` returns it from the in-memory cache on every subsequent call. A new exchange RPC is made only when the cached token has consumed 80% of its TTL (i.e. `refreshAt = expiresAt − ttl/5`). For a 300-second token this triggers refresh after 240 seconds — early enough to absorb a slow RPC or a brief network hiccup before the token actually expires. Concurrent callers are serialised behind a mutex: only one exchange call is ever in flight at a time, so there is no thundering herd.
 
-**Injection.** `GRPCCredentials` returns a `credentials.PerRPCCredentials` value. Passing it to `grpc.NewClient` via `grpc.WithPerRPCCredentials` causes the gRPC transport to call `Token` before every outgoing RPC and attach the result as an `Authorization: Bearer` header automatically.
+**gRPC injection.** `GRPCCredentials` returns a `credentials.PerRPCCredentials` value. Passing it to `grpc.NewClient` via `grpc.WithPerRPCCredentials` causes the gRPC transport to call `Token` before every outgoing RPC and attach the result as an `Authorization: Bearer` header automatically.
+
+**HTTP injection.** `NewHTTPTransport` returns an `http.RoundTripper` that does the same for HTTP callers. Set it as the `Transport` field of an `http.Client` and every request will carry a fresh (or cached) token without any per-request code. Passing `nil` as the base transport uses `http.DefaultTransport`. The original request is never mutated — `NewHTTPTransport` clones it before setting the header, as required by the `http.RoundTripper` contract.
 
 ---
 
