@@ -181,6 +181,29 @@ func writeTemp(t *testing.T, content string) string {
 	return f.Name()
 }
 
+func TestLoaderPolicies(t *testing.T) {
+	l := newTestLoader(t)
+
+	got := l.Policies()
+
+	// Contents must match the test YAML.
+	if len(got) != 2 {
+		t.Fatalf("got %d policies, want 2", len(got))
+	}
+	if got[0].Name != "order-to-payment" {
+		t.Errorf("got[0].Name = %q, want %q", got[0].Name, "order-to-payment")
+	}
+	if got[1].Name != "warehouse-to-inventory" {
+		t.Errorf("got[1].Name = %q, want %q", got[1].Name, "warehouse-to-inventory")
+	}
+
+	// Mutating the returned slice must not affect subsequent calls.
+	got[0].Name = "mutated"
+	if l.Policies()[0].Name == "mutated" {
+		t.Error("mutation of returned slice leaked into internal state")
+	}
+}
+
 func TestLoadFile(t *testing.T) {
 	tests := []struct {
 		name  string

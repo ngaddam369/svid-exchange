@@ -94,3 +94,61 @@ func TestRateLimitInterceptorResourceExhausted(t *testing.T) {
 		t.Fatalf("unexpected code: %v", status.Code(err))
 	}
 }
+
+func TestChainUnary(t *testing.T) {
+	var order []string
+
+	makeInterceptor := func(name string) grpc.UnaryServerInterceptor {
+		return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+			order = append(order, name+"-before")
+			resp, err := handler(ctx, req)
+			order = append(order, name+"-after")
+			return resp, err
+		}
+	}
+
+	handler := func(_ context.Context, req any) (any, error) {
+		order = append(order, "handler")
+		return "ok", nil
+	}
+
+	resp, err := chainUnary(makeInterceptor("first"), makeInterceptor("second"))(
+		context.Background(), "req", &grpc.UnaryServerInfo{}, handler,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp != "ok" {
+		t.Errorf("got %v, want %q", resp, "ok")
+	}
+
+	want := []string{"first-before", "second-before", "handler", "second-after", "first-after"}
+	if len(order) != len(want) {
+		t.Fatalf("execution order = %v, want %v", order, want)
+	}
+	for i, s := range want {
+		if order[i] != s {
+			t.Errorf("order[%d] = %q, want %q", i, order[i], s)
+		}
+	}
+
+	t.Run("first interceptor can short-circuit without calling handler", func(t *testing.T) {
+		errFirst := func(_ context.Context, _ any, _ *grpc.UnaryServerInfo, _ grpc.UnaryHandler) (any, error) {
+			return nil, status.Errorf(codes.Internal, "short-circuit")
+		}
+		handlerCalled := false
+		_, err := chainUnary(errFirst, makeInterceptor("second"))(
+			context.Background(), nil, &grpc.UnaryServerInfo{},
+			func(_ context.Context, _ any) (any, error) {
+				handlerCalled = true
+				return nil, nil
+			},
+		)
+		if status.Code(err) != codes.Internal {
+			t.Errorf("got code %v, want Internal", status.Code(err))
+		}
+		if handlerCalled {
+			t.Error("handler should not be called when first interceptor short-circuits")
+		}
+	})
+}

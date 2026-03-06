@@ -95,6 +95,28 @@ func TestExtractFromTLSState(t *testing.T) {
 	}
 }
 
+func TestExtractorExtractID(t *testing.T) {
+	var e Extractor
+
+	t.Run("valid SPIFFE URI", func(t *testing.T) {
+		ctx := ctxWithTLS(certWithURI(t, "spiffe://cluster.local/ns/default/sa/order"))
+		got, err := e.ExtractID(ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "spiffe://cluster.local/ns/default/sa/order" {
+			t.Errorf("got %q, want %q", got, "spiffe://cluster.local/ns/default/sa/order")
+		}
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		_, err := e.ExtractID(context.Background())
+		if err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+}
+
 func TestExtractID(t *testing.T) {
 	tests := []struct {
 		name    string
