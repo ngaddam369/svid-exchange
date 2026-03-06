@@ -160,6 +160,10 @@ grpc_server_handling_seconds_count{...}                     5
 grpc_server_handling_seconds_sum{...}                       0.000845
 ```
 
+## Using the client library
+
+Services that call svid-exchange can use the `pkg/client` package instead of managing token acquisition and caching themselves. It handles SPIFFE mTLS authentication, TTL-aware caching, and gRPC header injection in one place. See [Client Library](client-library.md) for details.
+
 ## Opt-in features
 
 Several security features are disabled by default and enabled via environment variables. Each has dedicated documentation covering motivation, configuration, and known limitations:

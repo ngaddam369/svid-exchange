@@ -11,4 +11,5 @@
   - [Audit Log Integrity](features/audit-log-integrity.md)
 - [Security](security.md)
 - [Design & Motivation](design.md)
+- [Client Library](client-library.md)
 - [API Reference](api-reference.md)

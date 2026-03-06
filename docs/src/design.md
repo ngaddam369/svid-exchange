@@ -84,6 +84,6 @@ The key design decisions and their rationale:
 | Rate limits are per-SPIFFE-ID, not per-target | Per-target limits require policy-file integration and are not yet implemented |
 | In-memory revocation list is not persisted | Revoked JTIs are lost on restart; a persistent store and a runtime admin endpoint for managing revocations are planned |
 | Multi-replica rate limiting requires external state | Redis or sidecar integration is a future consideration |
-| No client middleware library | A Go package for token fetch, cache, and automatic refresh is planned; callers currently manage the exchange call themselves |
+| Client library covers gRPC only (HTTP transport pending) | `pkg/client` provides `Client` (token fetch, TTL-aware cache, gRPC credential injection) and `Verifier` (JWKS-backed JWT validation); HTTP `RoundTripper` and HTTP server middleware are planned extensions |
 | No token delegation | The `on_behalf_of` pattern (service acting with a user's reduced permissions) requires a proto change and is planned as a future extension |
 | No cloud IAM federation | Presenting a SPIFFE SVID directly to AWS STS or GCP Workload Identity to obtain short-lived cloud credentials is a planned extension of the client library |

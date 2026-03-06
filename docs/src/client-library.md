@@ -1,0 +1,43 @@
+# Client Library
+
+`pkg/client` handles the client side of the svid-exchange token flow. Without it, every service that calls svid-exchange has to implement token acquisition, caching, and header injection independently — and get the edge cases (expiry races, thundering herd on refresh, stale tokens) right on its own. The library provides one correct implementation of all three.
+
+No new dependencies are needed. The package uses the same `go-spiffe/v2`, `grpc`, and `golang-jwt/jwt/v5` entries already in `go.mod`.
+
+---
+
+## Caller side — `Client`
+
+`Client` covers three responsibilities: authenticating to svid-exchange, caching the returned token, and injecting it into outgoing gRPC calls.
+
+**Authentication.** In production, `New` connects to svid-exchange over SPIFFE mTLS by fetching an X509-SVID from the local SPIRE Agent via the Workload API — the same mechanism the server itself uses. The Workload API socket is read from `Options.SpiffeSocket`, falling back to the `SPIFFE_ENDPOINT_SOCKET` environment variable.
+
+**Caching.** Once a token is obtained, `Token` returns it from the in-memory cache on every subsequent call. A new exchange RPC is made only when the cached token has consumed 80% of its TTL (i.e. `refreshAt = expiresAt − ttl/5`). For a 300-second token this triggers refresh after 240 seconds — early enough to absorb a slow RPC or a brief network hiccup before the token actually expires. Concurrent callers are serialised behind a mutex: only one exchange call is ever in flight at a time, so there is no thundering herd.
+
+**Injection.** `GRPCCredentials` returns a `credentials.PerRPCCredentials` value. Passing it to `grpc.NewClient` via `grpc.WithPerRPCCredentials` causes the gRPC transport to call `Token` before every outgoing RPC and attach the result as an `Authorization: Bearer` header automatically.
+
+---
+
+## Receiver side — `Verifier`
+
+`Verifier` covers the other end: validating the JWTs that arrive at a service. It fetches the server's JWKS document on construction and caches the signing public keys. `Verify` checks the signature, expiry, audience, and issuer claims against those keys and returns the parsed claims on success.
+
+During a signing key rotation the server publishes two keys simultaneously — the current key and the one it just replaced. `Verify` tries all cached keys, so tokens signed by either remain valid throughout the rotation window. After a rotation completes, call `Refresh` to drop the old key and pick up only the new one without restarting the process.
+
+---
+
+## Scope of this library
+
+`pkg/client` is intentionally limited to the token consumption flow. It does not expose any capability to create, delete, or reload policies. That is a deliberate boundary.
+
+Policy management changes the authorization rules of the entire system and belongs exclusively to platform or security teams — typically applied through deployment pipelines or operational tooling, not by the services themselves. Bundling policy management into the same client that every workload imports would mean any compromised service could potentially widen its own permissions. The admin API (`:8082`) is a separate, network-restricted endpoint for exactly this reason; workloads only need a path to the exchange endpoint (`:8080`).
+
+If you need to manage policies programmatically, use the admin gRPC stubs directly in a purpose-built admin tool, scoped to operators. See [API Reference](api-reference.md) for the admin service definition.
+
+---
+
+## Testing
+
+The production constructor (`New`) requires a live SPIRE Agent and a reachable svid-exchange server. Tests bypass both by wiring a mock directly to the unexported `exchanger` interface inside `package client`. The mock returns synthetic `ExchangeResponse` values and counts how many times `Exchange` was called, letting tests observe caching and refresh behaviour through the public `Token` API without touching any internal state.
+
+For `Verifier` tests, an `httptest.NewServer` serves a synthetic JWKS document built from a real `token.Minter` public key, so the full signature verification path runs with no network dependency.

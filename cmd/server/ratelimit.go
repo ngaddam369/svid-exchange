@@ -23,7 +23,7 @@ type limiterStore struct {
 // get returns the existing limiter for id, creating one on first call.
 func (s *limiterStore) get(id string) *rate.Limiter {
 	if v, ok := s.m.Load(id); ok {
-		l, ok := v.(*rate.Limiter) //nolint:errcheck // value type guaranteed: only *rate.Limiter is stored
+		l, ok := v.(*rate.Limiter)
 		if !ok {
 			panic("limiterStore: unexpected value type")
 		}
@@ -31,7 +31,7 @@ func (s *limiterStore) get(id string) *rate.Limiter {
 	}
 	l := rate.NewLimiter(s.rps, s.burst)
 	if actual, loaded := s.m.LoadOrStore(id, l); loaded {
-		existing, ok := actual.(*rate.Limiter) //nolint:errcheck // value type guaranteed
+		existing, ok := actual.(*rate.Limiter)
 		if !ok {
 			panic("limiterStore: unexpected value type")
 		}
