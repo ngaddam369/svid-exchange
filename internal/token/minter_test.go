@@ -20,7 +20,7 @@ func newTestMinter(t *testing.T) *Minter {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	return &Minter{current: key}
+	return &Minter{current: &ecdsaSigner{key: key}}
 }
 
 func parseClaims(t *testing.T, m *Minter, tokenStr string) jwt.MapClaims {
@@ -136,6 +136,67 @@ func TestMint(t *testing.T) {
 			seen[r.TokenID] = true
 		}
 	})
+}
+
+func TestNewMinterFromSigner(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	s := &ecdsaSigner{key: key}
+	m := NewMinterFromSigner(s)
+
+	if m.PublicKey() != &key.PublicKey {
+		t.Error("PublicKey should match the injected signer's key")
+	}
+	// Verify a token minted by the injected signer is valid.
+	result, err := m.Mint("spiffe://a", "spiffe://b", []string{"r:w"}, 60)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	parseClaims(t, m, result.Token)
+}
+
+func TestRotateTo(t *testing.T) {
+	m := newTestMinter(t)
+	prevPub := m.PublicKey()
+
+	key2, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key2: %v", err)
+	}
+	s2 := &ecdsaSigner{key: key2}
+	m.RotateTo(s2)
+
+	if m.PublicKey() == prevPub {
+		t.Error("PublicKey unchanged after RotateTo")
+	}
+	if m.PublicKey() != &key2.PublicKey {
+		t.Error("PublicKey should be the new signer's key after RotateTo")
+	}
+
+	// Previous key must still appear in PublicKeys.
+	keys := m.PublicKeys()
+	if len(keys) != 2 {
+		t.Fatalf("got %d keys, want 2", len(keys))
+	}
+	found := false
+	for _, k := range keys {
+		if k == prevPub {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("previous key missing from PublicKeys after RotateTo")
+	}
+
+	// Tokens minted before RotateTo must still verify with the old key.
+	result, err := NewMinterFromSigner(&ecdsaSigner{key: key2}).Mint("spiffe://a", "spiffe://b", []string{"r"}, 60)
+	if err != nil {
+		t.Fatalf("Mint after RotateTo: %v", err)
+	}
+	parseClaims(t, m, result.Token)
 }
 
 func TestRotate(t *testing.T) {

@@ -47,7 +47,7 @@ Tokens issued by svid-exchange are ES256 JWTs with the following security proper
 | **TTL** | Capped by `max_ttl` in policy — no long-lived tokens |
 | **JTI** | Unique UUID per token — tracked server-side to detect replays |
 
-The signing key is an ephemeral ES256 key pair generated at startup. The corresponding public key is served at `/jwks` for downstream verification.
+Tokens are signed by a `token.Signer` implementation. The default is an in-process ES256 key pair generated at startup; see [KMS integration](#kms-integration) for keeping the private key off-disk. The corresponding public key (or keys, during a rotation window) is served at `/jwks` for downstream verification.
 
 When `KEY_ROTATION_INTERVAL` is set, the minter generates a new key on that schedule. The outgoing key is retained and continues to appear in the `/jwks` response for one full interval, so tokens signed just before a rotation remain verifiable until they expire naturally. After the next rotation the old key is evicted — at most two keys are ever active at once. This bounds the exposure window of any single private key to one rotation interval.
 
@@ -74,6 +74,57 @@ Practical guidance:
 | 86 400 s (1 day) | 24 h | 48 h |
 
 > **Note:** The demo stack sets `KEY_ROTATION_INTERVAL=5s` with a policy `max_ttl` of 300 s solely to make the rotation mechanism visible during local testing. That combination is intentionally broken for demonstration purposes and must not be used in production.
+
+### KMS integration
+
+By default svid-exchange generates an ephemeral ES256 key pair in process. The private key lives in heap memory for the lifetime of the process. For environments that require the private key to never leave a hardware boundary (PCI-DSS, FIPS, regulated industries), svid-exchange exposes a `token.Signer` interface:
+
+```go
+type Signer interface {
+    // Sign receives the SHA-256 digest of the JWT signing string and must
+    // return the signature in IEEE P1363 format (r‖s, each 32 bytes for P-256).
+    Sign(digest []byte) ([]byte, error)
+    PublicKey() *ecdsa.PublicKey
+}
+```
+
+Pass any implementation to `token.NewMinterFromSigner(s)` at startup. The rest of the service — JWKS endpoint, key rotation, Exchange handler — is unaffected.
+
+**AWS KMS example** (using [aws-sdk-go-v2](https://github.com/aws/aws-sdk-go-v2)):
+
+```go
+type awsKMSSigner struct {
+    client *kms.Client
+    keyID  string
+    pub    *ecdsa.PublicKey
+}
+
+func (s *awsKMSSigner) Sign(digest []byte) ([]byte, error) {
+    out, err := s.client.Sign(context.Background(), &kms.SignInput{
+        KeyId:            &s.keyID,
+        Message:          digest,
+        MessageType:      types.MessageTypeDigest,
+        SigningAlgorithm: types.SigningAlgorithmSpecEcdsaSha256,
+    })
+    if err != nil {
+        return nil, err
+    }
+    // KMS returns DER; JWT ES256 requires IEEE P1363.
+    return token.DERToP1363(out.Signature, 32)
+}
+
+func (s *awsKMSSigner) PublicKey() *ecdsa.PublicKey { return s.pub }
+```
+
+Then wire it at startup:
+
+```go
+minter := token.NewMinterFromSigner(awsSigner)
+```
+
+For KMS-managed key rotation, call `minter.RotateTo(newSigner)` with a signer pointing at the new KMS key version. The previous public key is retained in `/jwks` for one rotation interval exactly as with in-process rotation.
+
+The helper `token.DERToP1363(der []byte, coordLen int)` is exported for use in KMS adapter implementations — it converts the DER-encoded signature that AWS KMS and GCP Cloud KMS return into the IEEE P1363 format required by JWT ES256.
 
 ## Replay protection
 

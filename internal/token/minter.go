@@ -3,42 +3,54 @@ package token
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
 const issuer = "svid-exchange"
 
-// Minter signs JWTs with an ES256 private key and supports key rotation.
-// The zero value is not usable; use NewMinter.
+// jwtHeader is the base64url-encoded ES256 JWT header, constant across all tokens.
+var jwtHeader = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES256","typ":"JWT"}`))
+
+// Minter signs JWTs using a Signer and supports key rotation.
+// The zero value is not usable; use NewMinter or NewMinterFromSigner.
 type Minter struct {
 	mu       sync.RWMutex
-	current  *ecdsa.PrivateKey
-	previous *ecdsa.PrivateKey
+	current  Signer
+	previous Signer
 }
 
-// NewMinter generates an ephemeral ES256 key pair. In production, load the key
-// from a secrets manager or KMS.
+// NewMinter creates a Minter backed by a freshly generated ephemeral ES256
+// key pair. The private key lives in process memory. For environments that
+// require the private key to never leave a hardware boundary, use
+// NewMinterFromSigner with a KMS-backed Signer implementation instead.
 func NewMinter() (*Minter, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	s, err := newECDSASigner()
 	if err != nil {
-		return nil, fmt.Errorf("generate signing key: %w", err)
+		return nil, err
 	}
-	return &Minter{current: key}, nil
+	return NewMinterFromSigner(s), nil
+}
+
+// NewMinterFromSigner creates a Minter that signs JWTs with the provided
+// Signer. Use this to plug in an AWS KMS, GCP Cloud KMS, or Vault Transit
+// backend — the rest of the service (JWKS, rotation, Exchange) is unaffected.
+func NewMinterFromSigner(s Signer) *Minter {
+	return &Minter{current: s}
 }
 
 // PublicKey returns the current signing public key.
 func (m *Minter) PublicKey() *ecdsa.PublicKey {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return &m.current.PublicKey
+	return m.current.PublicKey()
 }
 
 // PublicKeys returns all currently active public keys. During a rotation
@@ -48,24 +60,32 @@ func (m *Minter) PublicKeys() []*ecdsa.PublicKey {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.previous == nil {
-		return []*ecdsa.PublicKey{&m.current.PublicKey}
+		return []*ecdsa.PublicKey{m.current.PublicKey()}
 	}
-	return []*ecdsa.PublicKey{&m.current.PublicKey, &m.previous.PublicKey}
+	return []*ecdsa.PublicKey{m.current.PublicKey(), m.previous.PublicKey()}
 }
 
-// Rotate generates a new signing key. The current key is retained as the
-// previous key so tokens signed before the rotation remain verifiable via
-// PublicKeys() until the next rotation.
+// Rotate generates a new ephemeral ES256 signing key and promotes the current
+// key to previous. Intended for in-process signing; for KMS-backed signers use
+// RotateTo with the new signer pointing at the new key version.
 func (m *Minter) Rotate() error {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	s, err := newECDSASigner()
 	if err != nil {
-		return fmt.Errorf("generate signing key: %w", err)
+		return err
 	}
+	m.RotateTo(s)
+	return nil
+}
+
+// RotateTo replaces the current Signer with s. The current Signer is retained
+// as previous for one rotation window so that tokens issued before the rotation
+// remain verifiable via PublicKeys. Use this for KMS-managed key rotation:
+// create a Signer pointing at the new KMS key version, then call RotateTo.
+func (m *Minter) RotateTo(s Signer) {
 	m.mu.Lock()
 	m.previous = m.current
-	m.current = key
+	m.current = s
 	m.mu.Unlock()
-	return nil
 }
 
 // MintResult holds the signed token and its metadata.
@@ -76,18 +96,20 @@ type MintResult struct {
 	GrantedScopes []string
 }
 
-// Mint signs a JWT for the given subject/target/scopes/ttl with the current key.
-// ttlSeconds must be positive; the policy layer is responsible for enforcing the ceiling.
+// Mint signs a JWT for the given subject/target/scopes/ttl.
+// The JWT is constructed manually so that any Signer backend — local key or
+// KMS — can provide the signature without access to the private key bytes.
+// ttlSeconds must be positive; the policy layer enforces the ceiling.
 func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32) (MintResult, error) {
 	m.mu.RLock()
-	key := m.current
+	signer := m.current
 	m.mu.RUnlock()
 
 	jti := uuid.New().String()
 	now := time.Now().UTC()
 	exp := now.Add(time.Duration(ttlSeconds) * time.Second)
 
-	claims := jwt.MapClaims{
+	payloadBytes, err := json.Marshal(map[string]any{
 		"iss":   issuer,
 		"sub":   subject,
 		"aud":   []string{target},
@@ -95,14 +117,21 @@ func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32)
 		"iat":   now.Unix(),
 		"exp":   exp.Unix(),
 		"jti":   jti,
+	})
+	if err != nil {
+		return MintResult{}, fmt.Errorf("marshal claims: %w", err)
 	}
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
-	signed, err := tok.SignedString(key)
+	payload := base64.RawURLEncoding.EncodeToString(payloadBytes)
+	signingString := jwtHeader + "." + payload
+	digest := sha256.Sum256([]byte(signingString))
+
+	sig, err := signer.Sign(digest[:])
 	if err != nil {
 		return MintResult{}, fmt.Errorf("sign token: %w", err)
 	}
 
+	signed := signingString + "." + base64.RawURLEncoding.EncodeToString(sig)
 	return MintResult{
 		Token:         signed,
 		TokenID:       jti,
