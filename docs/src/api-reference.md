@@ -124,7 +124,7 @@ grpcurl \
 
 ### DeletePolicy
 
-Removes a dynamic policy by name. YAML-sourced policies cannot be deleted via the API — edit the YAML file and send `SIGHUP` instead.
+Removes a dynamic policy by name. YAML-sourced policies cannot be deleted via the API — edit the YAML file and call `ReloadPolicy` (or send `SIGHUP`) instead.
 
 ```protobuf
 rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
@@ -168,6 +168,38 @@ grpcurl \
   -key  /tmp/svid/svid.N.key \
   -proto proto/admin/v1/admin.proto \
   localhost:8082 admin.v1.PolicyAdmin/ListPolicies
+```
+
+### ReloadPolicy
+
+Re-reads the YAML policy file from disk and merges it with all dynamic policies, exactly as `SIGHUP` does. Use this in production environments where OS-level process access is restricted or unavailable.
+
+```protobuf
+rpc ReloadPolicy(ReloadPolicyRequest) returns (ReloadPolicyResponse);
+```
+
+**Behaviour:**
+- Re-reads `POLICY_FILE` from disk and validates its contents.
+- If valid, atomically replaces the active YAML policy set and merges with all dynamic policies from the store.
+- If the file is invalid, the currently active policy is unchanged and an error is returned.
+- `SIGHUP` remains available as a fallback (both paths call the same reload logic).
+
+**Status codes:**
+
+| Code | Condition |
+|------|-----------|
+| `OK` | Policy file reloaded and active |
+| `INTERNAL` | File is missing, unreadable, or contains invalid YAML |
+
+#### Example (grpcurl)
+
+```bash
+grpcurl \
+  -insecure \
+  -cert /tmp/svid/svid.N.pem \
+  -key  /tmp/svid/svid.N.key \
+  -proto proto/admin/v1/admin.proto \
+  localhost:8082 admin.v1.PolicyAdmin/ReloadPolicy
 ```
 
 ---

@@ -17,13 +17,19 @@ service PolicyAdmin {
   // DeletePolicy removes a dynamic policy by name.
   // Returns NOT_FOUND if the policy does not exist in the dynamic store.
   // Returns FAILED_PRECONDITION if the policy was loaded from the YAML file
-  // (YAML policies can only be removed by editing the file and sending SIGHUP).
+  // (YAML policies can only be removed by editing the file and calling ReloadPolicy or sending SIGHUP).
   rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
 
   // ListPolicies returns all active policies — both YAML-sourced and dynamic.
   // Each entry includes a source field ("yaml" or "dynamic") so callers can
   // distinguish policies that originated from the file versus the API.
   rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+
+  // ReloadPolicy re-reads the YAML policy file from disk and merges it with
+  // all dynamic policies, exactly as SIGHUP does. Use this instead of sending
+  // a signal in production environments. If the file is invalid the active
+  // policy is unchanged and an error is returned.
+  rpc ReloadPolicy(ReloadPolicyRequest) returns (ReloadPolicyResponse);
 }
 
 // PolicyRule mirrors the YAML policy structure.
@@ -71,3 +77,7 @@ message PolicyEntry {
 message ListPoliciesResponse {
   repeated PolicyEntry policies = 1;
 }
+
+message ReloadPolicyRequest {}
+
+message ReloadPolicyResponse {}

@@ -19,17 +19,20 @@ type Server struct {
 	store        *policy.Store
 	yamlPolicies func() []policy.Policy
 	swap         func(*policy.Loader)
+	reload       func() error
 }
 
 // New returns a Server. yamlPolicies must return the current YAML-sourced
 // policies (used for conflict detection). swap is called with the rebuilt
-// Loader after every store mutation.
+// Loader after every store mutation. reload is called by ReloadPolicy to
+// re-read the YAML file and merge it with dynamic policies.
 func New(
 	store *policy.Store,
 	yamlPolicies func() []policy.Policy,
 	swap func(*policy.Loader),
+	reload func() error,
 ) *Server {
-	return &Server{store: store, yamlPolicies: yamlPolicies, swap: swap}
+	return &Server{store: store, yamlPolicies: yamlPolicies, swap: swap, reload: reload}
 }
 
 // CreatePolicy adds a new dynamic policy. It fails with ALREADY_EXISTS if the
@@ -132,6 +135,16 @@ func (s *Server) DeletePolicy(_ context.Context, req *adminv1.DeletePolicyReques
 	s.swap(loader)
 
 	return &adminv1.DeletePolicyResponse{}, nil
+}
+
+// ReloadPolicy re-reads the YAML policy file from disk and merges it with all
+// dynamic policies, exactly as SIGHUP does. If the file is invalid the active
+// policy is unchanged and an Internal error is returned.
+func (s *Server) ReloadPolicy(_ context.Context, _ *adminv1.ReloadPolicyRequest) (*adminv1.ReloadPolicyResponse, error) {
+	if err := s.reload(); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &adminv1.ReloadPolicyResponse{}, nil
 }
 
 // ListPolicies returns all active policies with their source ("yaml" or "dynamic").

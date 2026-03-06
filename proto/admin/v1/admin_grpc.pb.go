@@ -22,6 +22,7 @@ const (
 	PolicyAdmin_CreatePolicy_FullMethodName = "/admin.v1.PolicyAdmin/CreatePolicy"
 	PolicyAdmin_DeletePolicy_FullMethodName = "/admin.v1.PolicyAdmin/DeletePolicy"
 	PolicyAdmin_ListPolicies_FullMethodName = "/admin.v1.PolicyAdmin/ListPolicies"
+	PolicyAdmin_ReloadPolicy_FullMethodName = "/admin.v1.PolicyAdmin/ReloadPolicy"
 )
 
 // PolicyAdminClient is the client API for PolicyAdmin service.
@@ -40,12 +41,17 @@ type PolicyAdminClient interface {
 	// DeletePolicy removes a dynamic policy by name.
 	// Returns NOT_FOUND if the policy does not exist in the dynamic store.
 	// Returns FAILED_PRECONDITION if the policy was loaded from the YAML file
-	// (YAML policies can only be removed by editing the file and sending SIGHUP).
+	// (YAML policies can only be removed by editing the file and calling ReloadPolicy or sending SIGHUP).
 	DeletePolicy(ctx context.Context, in *DeletePolicyRequest, opts ...grpc.CallOption) (*DeletePolicyResponse, error)
 	// ListPolicies returns all active policies — both YAML-sourced and dynamic.
 	// Each entry includes a source field ("yaml" or "dynamic") so callers can
 	// distinguish policies that originated from the file versus the API.
 	ListPolicies(ctx context.Context, in *ListPoliciesRequest, opts ...grpc.CallOption) (*ListPoliciesResponse, error)
+	// ReloadPolicy re-reads the YAML policy file from disk and merges it with
+	// all dynamic policies, exactly as SIGHUP does. Use this instead of sending
+	// a signal in production environments. If the file is invalid the active
+	// policy is unchanged and an error is returned.
+	ReloadPolicy(ctx context.Context, in *ReloadPolicyRequest, opts ...grpc.CallOption) (*ReloadPolicyResponse, error)
 }
 
 type policyAdminClient struct {
@@ -86,6 +92,16 @@ func (c *policyAdminClient) ListPolicies(ctx context.Context, in *ListPoliciesRe
 	return out, nil
 }
 
+func (c *policyAdminClient) ReloadPolicy(ctx context.Context, in *ReloadPolicyRequest, opts ...grpc.CallOption) (*ReloadPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReloadPolicyResponse)
+	err := c.cc.Invoke(ctx, PolicyAdmin_ReloadPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PolicyAdminServer is the server API for PolicyAdmin service.
 // All implementations must embed UnimplementedPolicyAdminServer
 // for forward compatibility.
@@ -102,12 +118,17 @@ type PolicyAdminServer interface {
 	// DeletePolicy removes a dynamic policy by name.
 	// Returns NOT_FOUND if the policy does not exist in the dynamic store.
 	// Returns FAILED_PRECONDITION if the policy was loaded from the YAML file
-	// (YAML policies can only be removed by editing the file and sending SIGHUP).
+	// (YAML policies can only be removed by editing the file and calling ReloadPolicy or sending SIGHUP).
 	DeletePolicy(context.Context, *DeletePolicyRequest) (*DeletePolicyResponse, error)
 	// ListPolicies returns all active policies — both YAML-sourced and dynamic.
 	// Each entry includes a source field ("yaml" or "dynamic") so callers can
 	// distinguish policies that originated from the file versus the API.
 	ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error)
+	// ReloadPolicy re-reads the YAML policy file from disk and merges it with
+	// all dynamic policies, exactly as SIGHUP does. Use this instead of sending
+	// a signal in production environments. If the file is invalid the active
+	// policy is unchanged and an error is returned.
+	ReloadPolicy(context.Context, *ReloadPolicyRequest) (*ReloadPolicyResponse, error)
 	mustEmbedUnimplementedPolicyAdminServer()
 }
 
@@ -126,6 +147,9 @@ func (UnimplementedPolicyAdminServer) DeletePolicy(context.Context, *DeletePolic
 }
 func (UnimplementedPolicyAdminServer) ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPolicies not implemented")
+}
+func (UnimplementedPolicyAdminServer) ReloadPolicy(context.Context, *ReloadPolicyRequest) (*ReloadPolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReloadPolicy not implemented")
 }
 func (UnimplementedPolicyAdminServer) mustEmbedUnimplementedPolicyAdminServer() {}
 func (UnimplementedPolicyAdminServer) testEmbeddedByValue()                     {}
@@ -202,6 +226,24 @@ func _PolicyAdmin_ListPolicies_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PolicyAdmin_ReloadPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReloadPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PolicyAdminServer).ReloadPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PolicyAdmin_ReloadPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PolicyAdminServer).ReloadPolicy(ctx, req.(*ReloadPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PolicyAdmin_ServiceDesc is the grpc.ServiceDesc for PolicyAdmin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -220,6 +262,10 @@ var PolicyAdmin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPolicies",
 			Handler:    _PolicyAdmin_ListPolicies_Handler,
+		},
+		{
+			MethodName: "ReloadPolicy",
+			Handler:    _PolicyAdmin_ReloadPolicy_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

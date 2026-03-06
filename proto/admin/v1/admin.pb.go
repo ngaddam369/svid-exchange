@@ -405,6 +405,78 @@ func (x *ListPoliciesResponse) GetPolicies() []*PolicyEntry {
 	return nil
 }
 
+type ReloadPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReloadPolicyRequest) Reset() {
+	*x = ReloadPolicyRequest{}
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReloadPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReloadPolicyRequest) ProtoMessage() {}
+
+func (x *ReloadPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReloadPolicyRequest.ProtoReflect.Descriptor instead.
+func (*ReloadPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{8}
+}
+
+type ReloadPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReloadPolicyResponse) Reset() {
+	*x = ReloadPolicyResponse{}
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReloadPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReloadPolicyResponse) ProtoMessage() {}
+
+func (x *ReloadPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReloadPolicyResponse.ProtoReflect.Descriptor instead.
+func (*ReloadPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{9}
+}
+
 var File_proto_admin_v1_admin_proto protoreflect.FileDescriptor
 
 const file_proto_admin_v1_admin_proto_rawDesc = "" +
@@ -429,11 +501,14 @@ const file_proto_admin_v1_admin_proto_rawDesc = "" +
 	"\x04rule\x18\x01 \x01(\v2\x14.admin.v1.PolicyRuleR\x04rule\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\"I\n" +
 	"\x14ListPoliciesResponse\x121\n" +
-	"\bpolicies\x18\x01 \x03(\v2\x15.admin.v1.PolicyEntryR\bpolicies2\xfa\x01\n" +
+	"\bpolicies\x18\x01 \x03(\v2\x15.admin.v1.PolicyEntryR\bpolicies\"\x15\n" +
+	"\x13ReloadPolicyRequest\"\x16\n" +
+	"\x14ReloadPolicyResponse2\xc9\x02\n" +
 	"\vPolicyAdmin\x12M\n" +
 	"\fCreatePolicy\x12\x1d.admin.v1.CreatePolicyRequest\x1a\x1e.admin.v1.CreatePolicyResponse\x12M\n" +
 	"\fDeletePolicy\x12\x1d.admin.v1.DeletePolicyRequest\x1a\x1e.admin.v1.DeletePolicyResponse\x12M\n" +
-	"\fListPolicies\x12\x1d.admin.v1.ListPoliciesRequest\x1a\x1e.admin.v1.ListPoliciesResponseB<Z:github.com/ngaddam369/svid-exchange/proto/admin/v1;adminv1b\x06proto3"
+	"\fListPolicies\x12\x1d.admin.v1.ListPoliciesRequest\x1a\x1e.admin.v1.ListPoliciesResponse\x12M\n" +
+	"\fReloadPolicy\x12\x1d.admin.v1.ReloadPolicyRequest\x1a\x1e.admin.v1.ReloadPolicyResponseB<Z:github.com/ngaddam369/svid-exchange/proto/admin/v1;adminv1b\x06proto3"
 
 var (
 	file_proto_admin_v1_admin_proto_rawDescOnce sync.Once
@@ -447,7 +522,7 @@ func file_proto_admin_v1_admin_proto_rawDescGZIP() []byte {
 	return file_proto_admin_v1_admin_proto_rawDescData
 }
 
-var file_proto_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_proto_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_proto_admin_v1_admin_proto_goTypes = []any{
 	(*PolicyRule)(nil),           // 0: admin.v1.PolicyRule
 	(*CreatePolicyRequest)(nil),  // 1: admin.v1.CreatePolicyRequest
@@ -457,6 +532,8 @@ var file_proto_admin_v1_admin_proto_goTypes = []any{
 	(*ListPoliciesRequest)(nil),  // 5: admin.v1.ListPoliciesRequest
 	(*PolicyEntry)(nil),          // 6: admin.v1.PolicyEntry
 	(*ListPoliciesResponse)(nil), // 7: admin.v1.ListPoliciesResponse
+	(*ReloadPolicyRequest)(nil),  // 8: admin.v1.ReloadPolicyRequest
+	(*ReloadPolicyResponse)(nil), // 9: admin.v1.ReloadPolicyResponse
 }
 var file_proto_admin_v1_admin_proto_depIdxs = []int32{
 	0, // 0: admin.v1.CreatePolicyRequest.rule:type_name -> admin.v1.PolicyRule
@@ -466,11 +543,13 @@ var file_proto_admin_v1_admin_proto_depIdxs = []int32{
 	1, // 4: admin.v1.PolicyAdmin.CreatePolicy:input_type -> admin.v1.CreatePolicyRequest
 	3, // 5: admin.v1.PolicyAdmin.DeletePolicy:input_type -> admin.v1.DeletePolicyRequest
 	5, // 6: admin.v1.PolicyAdmin.ListPolicies:input_type -> admin.v1.ListPoliciesRequest
-	2, // 7: admin.v1.PolicyAdmin.CreatePolicy:output_type -> admin.v1.CreatePolicyResponse
-	4, // 8: admin.v1.PolicyAdmin.DeletePolicy:output_type -> admin.v1.DeletePolicyResponse
-	7, // 9: admin.v1.PolicyAdmin.ListPolicies:output_type -> admin.v1.ListPoliciesResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
+	8, // 7: admin.v1.PolicyAdmin.ReloadPolicy:input_type -> admin.v1.ReloadPolicyRequest
+	2, // 8: admin.v1.PolicyAdmin.CreatePolicy:output_type -> admin.v1.CreatePolicyResponse
+	4, // 9: admin.v1.PolicyAdmin.DeletePolicy:output_type -> admin.v1.DeletePolicyResponse
+	7, // 10: admin.v1.PolicyAdmin.ListPolicies:output_type -> admin.v1.ListPoliciesResponse
+	9, // 11: admin.v1.PolicyAdmin.ReloadPolicy:output_type -> admin.v1.ReloadPolicyResponse
+	8, // [8:12] is the sub-list for method output_type
+	4, // [4:8] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
 	4, // [4:4] is the sub-list for extension extendee
 	0, // [0:4] is the sub-list for field type_name
@@ -487,7 +566,7 @@ func file_proto_admin_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_admin_v1_admin_proto_rawDesc), len(file_proto_admin_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -217,12 +217,24 @@ func main() {
 		log.Fatal().Err(err).Str("addr", grpcAddr).Msg("listen gRPC")
 	}
 
+	// --- Policy hot-reload closure ---
+	// reloadPolicy re-reads the YAML file and merges it with dynamic policies.
+	// Called by both SIGHUP and the ReloadPolicy admin RPC.
+	reloadPolicy := func() error {
+		newPolicy, err := policy.LoadFile(policyPath)
+		if err != nil {
+			return err
+		}
+		ap.setBase(newPolicy.Policies())
+		return ap.rebuild(store)
+	}
+
 	// --- Admin gRPC server ---
 	// Separate listener on ADMIN_ADDR so it can be network-restricted
 	// independently of the data-plane gRPC port.
 	// Uses the same mTLS credentials as the data-plane server.
 	adminServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)))
-	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap)
+	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap, reloadPolicy)
 	adminv1.RegisterPolicyAdminServer(adminServer, adminSvc)
 	if os.Getenv("GRPC_REFLECTION") != "false" {
 		reflection.Register(adminServer)
@@ -263,14 +275,8 @@ func main() {
 		for {
 			select {
 			case <-hup:
-				newPolicy, loadErr := policy.LoadFile(policyPath)
-				if loadErr != nil {
-					log.Error().Err(loadErr).Str("path", policyPath).Msg("policy reload failed, keeping existing policy")
-					continue
-				}
-				ap.setBase(newPolicy.Policies())
-				if rebuildErr := ap.rebuild(store); rebuildErr != nil {
-					log.Error().Err(rebuildErr).Msg("policy rebuild failed after reload, keeping existing policy")
+				if err := reloadPolicy(); err != nil {
+					log.Error().Err(err).Str("path", policyPath).Msg("policy reload failed, keeping existing policy")
 					continue
 				}
 				log.Info().Str("path", policyPath).Msg("policy reloaded")

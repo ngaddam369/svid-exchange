@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -44,6 +45,7 @@ func newTestServer(t *testing.T) (*Server, *policy.Store) {
 		store,
 		func() []policy.Policy { return yamlPolicies },
 		func(_ *policy.Loader) {},
+		func() error { return nil },
 	)
 	return svc, store
 }
@@ -184,6 +186,43 @@ func TestListPolicies(t *testing.T) {
 	if sources["dyn"] != "dynamic" {
 		t.Errorf("expected dyn source=dynamic, got %q", sources["dyn"])
 	}
+}
+
+func TestReloadPolicy(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		dbPath := filepath.Join(t.TempDir(), "policy.db")
+		store, err := policy.OpenStore(dbPath)
+		if err != nil {
+			t.Fatalf("open store: %v", err)
+		}
+		t.Cleanup(func() { store.Close() })
+		svc := New(
+			store,
+			func() []policy.Policy { return nil },
+			func(_ *policy.Loader) {},
+			func() error { return nil },
+		)
+		if _, err := svc.ReloadPolicy(context.Background(), &adminv1.ReloadPolicyRequest{}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("reload error returns Internal", func(t *testing.T) {
+		dbPath := filepath.Join(t.TempDir(), "policy.db")
+		store, err := policy.OpenStore(dbPath)
+		if err != nil {
+			t.Fatalf("open store: %v", err)
+		}
+		t.Cleanup(func() { store.Close() })
+		svc := New(
+			store,
+			func() []policy.Policy { return nil },
+			func(_ *policy.Loader) {},
+			func() error { return errors.New("bad yaml") },
+		)
+		_, err = svc.ReloadPolicy(context.Background(), &adminv1.ReloadPolicyRequest{})
+		assertCode(t, err, codes.Internal)
+	})
 }
 
 func assertCode(t *testing.T, err error, want codes.Code) {
