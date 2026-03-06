@@ -4,7 +4,7 @@
 
 **Service:** `exchange.v1.TokenExchange`
 
-**Address:** `:8080` (configurable via `GRPC_ADDR`)
+**Address:** `:8080` (configurable via `grpc_addr` in `config/server.yaml`)
 
 **Transport:** mTLS required — connections without a valid SPIRE-issued client certificate are rejected at the transport layer.
 
@@ -70,7 +70,7 @@ grpcurl \
 
 **Service:** `admin.v1.PolicyAdmin`
 
-**Address:** `:8082` (configurable via `ADMIN_ADDR`)
+**Address:** `:8082` (configurable via `admin_addr` in `config/server.yaml`)
 
 **Transport:** mTLS required — same SPIRE-issued certificates as the data-plane port.
 
@@ -205,7 +205,7 @@ grpcurl \
 
 ## HTTP endpoints
 
-**Address:** `:8081` (configurable via `HEALTH_ADDR`)
+**Address:** `:8081` (configurable via `health_addr` in `config/server.yaml`)
 **Transport:** plain HTTP — intended for internal infrastructure use only (health checks, key distribution, metrics scraping).
 
 ### GET /health/live

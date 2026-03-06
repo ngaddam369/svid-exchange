@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
@@ -16,15 +15,13 @@ import (
 
 // initTracing configures the global OpenTelemetry TracerProvider.
 //
-// When OTEL_EXPORTER_OTLP_ENDPOINT is set, traces are exported via OTLP gRPC
-// to that endpoint. When the variable is unset the function installs a no-op
-// provider and returns immediately — the service works normally, just without
-// traces.
+// When endpoint is non-empty, traces are exported via OTLP gRPC to that
+// address. When endpoint is empty the function installs a no-op provider and
+// returns immediately — the service works normally, just without traces.
 //
 // The returned shutdown function must be called during graceful shutdown so
 // that any buffered spans are flushed to the backend before the process exits.
-func initTracing(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+func initTracing(ctx context.Context, endpoint string) (shutdown func(context.Context) error, err error) {
 	if endpoint == "" {
 		return func(context.Context) error { return nil }, nil
 	}

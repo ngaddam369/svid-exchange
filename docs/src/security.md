@@ -49,7 +49,7 @@ Tokens issued by svid-exchange are ES256 JWTs with the following security proper
 
 Tokens are signed by a `token.Signer` implementation. The default is an in-process ES256 key pair generated at startup; see [KMS integration](#kms-integration) for keeping the private key off-disk. The corresponding public key (or keys, during a rotation window) is served at `/jwks` for downstream verification.
 
-When `KEY_ROTATION_INTERVAL` is set, the minter generates a new key on that schedule. The outgoing key is retained and continues to appear in the `/jwks` response for one full interval, so tokens signed just before a rotation remain verifiable until they expire naturally. After the next rotation the old key is evicted — at most two keys are ever active at once. This bounds the exposure window of any single private key to one rotation interval.
+When `key_rotation_interval` is set in `config/server.yaml`, the minter generates a new key on that schedule. The outgoing key is retained and continues to appear in the `/jwks` response for one full interval, so tokens signed just before a rotation remain verifiable until they expire naturally. After the next rotation the old key is evicted — at most two keys are ever active at once. This bounds the exposure window of any single private key to one rotation interval.
 
 ### TTL and rotation interval
 
@@ -60,20 +60,20 @@ When a token is minted it is signed with the **current** key. That key survives 
 The safety invariant is:
 
 ```
-KEY_ROTATION_INTERVAL  ≥  max_ttl (across all policies)
+key_rotation_interval  ≥  max_ttl (across all policies)
 ```
 
 If the interval is shorter than the longest `max_ttl` in the policy file, tokens can outlive their signing key and become unverifiable before they expire. svid-exchange does not enforce this automatically; the operator is responsible for setting both values consistently.
 
 Practical guidance:
 
-| Policy `max_ttl` | Minimum `KEY_ROTATION_INTERVAL` | Typical production choice |
+| Policy `max_ttl` | Minimum `key_rotation_interval` | Typical production choice |
 |---|---|---|
 | 300 s (5 min) | 5 min | 24 h |
 | 3 600 s (1 h) | 1 h | 12 h or 24 h |
 | 86 400 s (1 day) | 24 h | 48 h |
 
-> **Note:** The demo stack sets `KEY_ROTATION_INTERVAL=5s` with a policy `max_ttl` of 300 s solely to make the rotation mechanism visible during local testing. That combination is intentionally broken for demonstration purposes and must not be used in production.
+> **Note:** The demo stack sets `key_rotation_interval: "5s"` with a policy `max_ttl` of 300 s solely to make the rotation mechanism visible during local testing. That combination is intentionally broken for demonstration purposes and must not be used in production.
 
 ### KMS integration
 
@@ -151,7 +151,7 @@ Rate limiting is a second line of defence that operates independently of the pol
 
 Each SPIFFE ID gets its own independent token bucket. A compromised or misbehaving workload can only exhaust its own quota — other identities are unaffected. Requests that exceed the quota are rejected with `ResourceExhausted` before the policy or minting logic runs.
 
-Rate limiting is opt-in via `RATE_LIMIT_RPS` and `RATE_LIMIT_BURST`. See [Rate Limiting](features/rate-limiting.md) for full configuration details and known limitations.
+Rate limiting is opt-in via `rate_limit_rps` and `rate_limit_burst` in `config/server.yaml`. See [Rate Limiting](features/rate-limiting.md) for full configuration details and known limitations.
 
 ## Audit logging
 
@@ -207,10 +207,10 @@ See [Audit Log Integrity](features/audit-log-integrity.md) for how the signing w
 
 ## gRPC reflection
 
-gRPC server reflection is enabled by default (useful for development with grpcurl). For production deployments, disable it:
+gRPC server reflection is enabled by default (useful for development with grpcurl). For production deployments, disable it in `config/server.yaml`:
 
-```bash
-GRPC_REFLECTION=false ./svid-exchange
+```yaml
+grpc_reflection: false
 ```
 
 When disabled, clients cannot enumerate available services or methods without the `.proto` file.

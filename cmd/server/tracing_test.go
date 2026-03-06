@@ -6,11 +6,8 @@ import (
 )
 
 func TestInitTracingNoop(t *testing.T) {
-	// OTEL_EXPORTER_OTLP_ENDPOINT is not set — should return a noop shutdown
-	// function with no error.
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-
-	shutdown, err := initTracing(context.Background())
+	// Empty endpoint — should return a noop shutdown function with no error.
+	shutdown, err := initTracing(context.Background(), "")
 	if err != nil {
 		t.Fatalf("initTracing: %v", err)
 	}

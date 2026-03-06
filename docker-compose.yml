@@ -96,17 +96,13 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
+      CONFIG_FILE:            /config/server.yaml
       POLICY_FILE:            /config/policy.example.yaml
+      POLICY_DB:              /data/policy.db
       SPIFFE_ENDPOINT_SOCKET: "unix:///opt/spire/sockets/agent.sock"
-      GRPC_ADDR:              ":8080"
-      HEALTH_ADDR:            ":8081"
-      ADMIN_ADDR:             ":8082"
-      POLICY_DB:              "/data/policy.db"
-      RATE_LIMIT_RPS:         "${RATE_LIMIT_RPS:-}"
-      RATE_LIMIT_BURST:       "${RATE_LIMIT_BURST:-}"
       AUDIT_HMAC_KEY:         "${AUDIT_HMAC_KEY:-}"    # hex-encoded 32-byte key; unset = no signing
-      KEY_ROTATION_INTERVAL:  "${KEY_ROTATION_INTERVAL:-}"   # e.g. 24h; unset = no rotation
     volumes:
+      - ./config/server.yaml:/config/server.yaml:ro
       - ./config/policy.example.yaml:/config/policy.example.yaml:ro
       - spire-sockets:/opt/spire/sockets
       - policy-data:/data                              # BoltDB for dynamic policies

@@ -80,7 +80,7 @@ The key design decisions and their rationale:
 
 | Limitation | Status |
 |------------|--------|
-| Signing key is ephemeral (generated at startup, lost on restart) | `KEY_ROTATION_INTERVAL` bounds the exposure window per key; KMS integration (AWS/GCP) for a persistent, hardware-protected key is planned |
+| Signing key is ephemeral (generated at startup, lost on restart) | `key_rotation_interval` bounds the exposure window per key; KMS integration (AWS/GCP) for a persistent, hardware-protected key is planned |
 | Rate limits are per-SPIFFE-ID, not per-target | Per-target limits require policy-file integration and are not yet implemented |
 | In-memory revocation list is not persisted | Revoked JTIs are lost on restart; a persistent store and a runtime admin endpoint for managing revocations are planned |
 | Multi-replica rate limiting requires external state | Redis or sidecar integration is a future consideration |

@@ -1,25 +1,43 @@
 # Configuration
 
+## Config file
+
+Non-secret configuration lives in a YAML file (default `config/server.yaml`). The path can be overridden with the `CONFIG_FILE` environment variable, which is how Kubernetes deployments can point at a ConfigMap-mounted file without changing any code.
+
+```yaml
+grpc_addr:   ":8080"
+health_addr: ":8081"
+admin_addr:  ":8082"
+
+# Set to false to disable gRPC server reflection (recommended for production).
+grpc_reflection: true
+
+# OTLP gRPC endpoint for distributed tracing. Empty disables tracing.
+otlp_endpoint: ""
+
+# Per-SPIFFE-ID rate limiting (token bucket). 0 disables rate limiting.
+rate_limit_rps:   0
+rate_limit_burst: 0
+
+# Signing key rotation interval (e.g. "24h"). Empty disables rotation.
+key_rotation_interval: ""
+```
+
 ## Environment variables
+
+Secrets and deployment-specific paths are always set via environment variables and are never written to a config file.
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `SPIFFE_ENDPOINT_SOCKET` | — | Yes | UNIX socket path to the SPIRE Workload API (e.g. `unix:///opt/spire/sockets/agent.sock`) |
-| `POLICY_FILE` | `config/policy.example.yaml` | No | Path to the policy YAML file |
-| `GRPC_ADDR` | `:8080` | No | gRPC listen address |
-| `HEALTH_ADDR` | `:8081` | No | Health + JWKS + Prometheus metrics HTTP listen address |
-| `GRPC_REFLECTION` | `true` | No | Set to `false` to disable gRPC server reflection (recommended for production) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | No | OTLP gRPC endpoint for trace export (e.g. `jaeger:4317`). When unset, a no-op tracer is used and no traces are collected. |
-| `RATE_LIMIT_RPS` | — | No | Max requests per second per SPIFFE ID (token bucket). Unset or `0` disables rate limiting. |
-| `RATE_LIMIT_BURST` | `RATE_LIMIT_RPS` | No | Burst capacity. Defaults to `RATE_LIMIT_RPS` rounded up when unset. |
 | `AUDIT_HMAC_KEY` | — | No | Hex-encoded 32-byte key for audit log HMAC signing. Must be exactly 64 hex characters. Unset disables signing. |
-| `ADMIN_ADDR` | `:8082` | No | Admin gRPC listen address for the dynamic policy API. Should be network-restricted to administrative clients only. |
+| `CONFIG_FILE` | `config/server.yaml` | No | Path to the server config YAML file |
+| `POLICY_FILE` | `config/policy.example.yaml` | No | Path to the policy YAML file. Overrides the compiled-in default. |
 | `POLICY_DB` | `data/policy.db` | No | Path to the BoltDB file used to persist dynamic policies created via the admin API. The parent directory is created automatically. |
-| `KEY_ROTATION_INTERVAL` | — | No | How often to rotate the signing key (e.g. `24h`, `12h`). The outgoing key is retained for one interval so that tokens issued just before a rotation remain verifiable. Must be ≥ the largest `max_ttl` across all policies — see [TTL and rotation interval](security.md#ttl-and-rotation-interval). Unset or empty disables automatic rotation. |
 
 ## HTTP endpoints
 
-All HTTP endpoints are served on `HEALTH_ADDR` (default `:8081`).
+All HTTP endpoints are served on `health_addr` (default `:8081`, set in `config/server.yaml`).
 
 | Path | Description |
 |------|-------------|
@@ -46,12 +64,12 @@ All series are pre-populated at zero on startup for the `Exchange` method, so al
 
 svid-exchange uses [OpenTelemetry](https://opentelemetry.io) for distributed tracing. Tracing is **opt-in** — the service runs normally without any trace backend configured.
 
-When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, every `Exchange` RPC produces a server span with:
+When `otlp_endpoint` is set in `config/server.yaml`, every `Exchange` RPC produces a server span with:
 - Operation name: `exchange.v1.TokenExchange/Exchange`
 - W3C TraceContext propagation from incoming gRPC metadata (so upstream callers can link their spans)
 - Buffered export via OTLP gRPC with graceful flush on shutdown
 
-Point the variable at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.). See [Distributed Tracing](features/distributed-tracing.md) for a local Jaeger setup.
+Point the field at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.). See [Distributed Tracing](features/distributed-tracing.md) for a local Jaeger setup.
 
 ## Policy file
 

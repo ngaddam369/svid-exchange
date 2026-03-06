@@ -2,7 +2,7 @@
 
 ## What it is
 
-svid-exchange emits OpenTelemetry spans for every `Exchange` RPC via a gRPC stats handler. Traces are exported over OTLP gRPC to any compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb). When `OTEL_EXPORTER_OTLP_ENDPOINT` is unset, a no-op tracer is used — zero overhead, no backend required.
+svid-exchange emits OpenTelemetry spans for every `Exchange` RPC via a gRPC stats handler. Traces are exported over OTLP gRPC to any compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb). When `otlp_endpoint` is empty (the default in `config/server.yaml`), a no-op tracer is used — zero overhead, no backend required.
 
 ## Why it exists
 
@@ -16,10 +16,10 @@ Concretely, tracing helps with:
 
 ## Enabling tracing
 
-Set `OTEL_EXPORTER_OTLP_ENDPOINT` to the gRPC address of your OTLP backend:
+Set `otlp_endpoint` in `config/server.yaml` to the gRPC address of your OTLP backend:
 
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 docker compose up svid-exchange --build -d
+```yaml
+otlp_endpoint: "jaeger:4317"
 ```
 
 svid-exchange logs on startup:
@@ -36,9 +36,9 @@ docker run -d --name jaeger \
   --network svid-exchange-dev_default \
   -p 16686:16686 -p 4317:4317 \
   jaegertracing/all-in-one:1.65.0
-
-OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 docker compose up svid-exchange --build -d
 ```
+
+Then set `otlp_endpoint: "jaeger:4317"` in `config/server.yaml` and restart the stack.
 
 Make a few exchange requests, then open `http://localhost:16686`, select the `svid-exchange` service, and find the `Exchange` spans.
 

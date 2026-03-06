@@ -24,14 +24,21 @@ This runs the full verification checklist (build → lint → test → policy va
 {"message":"health HTTP listening","addr":":8081"}
 ```
 
-To start with all opt-in security features enabled, generate the required keys first and pass them as environment variables:
+To start with all opt-in security features enabled, update `config/server.yaml` and generate the required secret first:
+
+```yaml
+# config/server.yaml — enable rate limiting and key rotation
+rate_limit_rps:        10
+rate_limit_burst:      10
+key_rotation_interval: "24h"
+```
 
 ```bash
-# Generate a 32-byte HMAC key for audit log signing
+# Generate a 32-byte HMAC key for audit log signing (secret — env var only)
 export AUDIT_HMAC_KEY=$(openssl rand -hex 32)
 
-# Start the stack with HMAC signing, rate limiting, and 24h key rotation active
-AUDIT_HMAC_KEY=$AUDIT_HMAC_KEY RATE_LIMIT_RPS=10 RATE_LIMIT_BURST=10 KEY_ROTATION_INTERVAL=24h docker compose up --build -d
+# Start the stack with HMAC signing active
+AUDIT_HMAC_KEY=$AUDIT_HMAC_KEY docker compose up --build -d
 ```
 
 With those features active, svid-exchange additionally logs:

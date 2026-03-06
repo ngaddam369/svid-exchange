@@ -4,7 +4,7 @@
 
 svid-exchange enforces a per-SPIFFE-ID token-bucket rate limit as a gRPC unary interceptor. Each caller identity gets its own independent bucket. Requests that exceed the configured quota are rejected with `ResourceExhausted` before the policy or minting logic is ever reached.
 
-When `RATE_LIMIT_RPS` is unset or `0`, rate limiting is disabled and all requests pass through without any quota check.
+When `rate_limit_rps` is `0` (the default in `config/server.yaml`), rate limiting is disabled and all requests pass through without any quota check.
 
 ## Why it exists
 
@@ -33,8 +33,11 @@ Rate-limited calls are still recorded in `grpc_server_handled_total{grpc_code="R
 
 ## Enabling rate limiting
 
-```bash
-RATE_LIMIT_RPS=10 RATE_LIMIT_BURST=10 docker compose up svid-exchange --build -d
+Set `rate_limit_rps` (and optionally `rate_limit_burst`) in `config/server.yaml`:
+
+```yaml
+rate_limit_rps:   10
+rate_limit_burst: 10
 ```
 
 svid-exchange logs on startup:
@@ -43,7 +46,7 @@ svid-exchange logs on startup:
 {"message":"rate limiting enabled","rps":10,"burst":10}
 ```
 
-`RATE_LIMIT_BURST` defaults to `ceil(RATE_LIMIT_RPS)` when unset, giving a burst capacity equal to one second's worth of quota.
+`rate_limit_burst` defaults to `ceil(rate_limit_rps)` when `0`, giving a burst capacity equal to one second's worth of quota.
 
 ### What a rate-limited caller sees
 
@@ -64,4 +67,4 @@ curl -s http://localhost:8081/metrics | grep ResourceExhausted
 
 - **In-process state** — the token buckets live in memory and reset on restart. In a multi-replica deployment each replica maintains its own counters; a caller could make `N × RPS` requests across `N` replicas. A shared rate limiter (Redis, a sidecar) would be needed for strict enforcement at scale.
 - **Per-identity, not per-target** — the limit applies to the total request rate from a SPIFFE ID, regardless of which target it is requesting tokens for. Per-target limits are not yet implemented.
-- **No dynamic adjustment** — RPS and burst are set at startup via env vars. Changing them requires a restart. Dynamic per-identity limits configurable in the policy file are a planned enhancement.
+- **No dynamic adjustment** — RPS and burst are set at startup via the config file. Changing them requires a restart. Dynamic per-identity limits configurable in the policy file are a planned enhancement.

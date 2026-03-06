@@ -2,7 +2,7 @@
 
 ## What it is
 
-svid-exchange exposes standard gRPC server metrics via the `grpc_server_*` family, served at `/metrics` on the health HTTP listener (`HEALTH_ADDR`, default `:8081`). Metrics are always on — no configuration is required.
+svid-exchange exposes standard gRPC server metrics via the `grpc_server_*` family, served at `/metrics` on the health HTTP listener (`health_addr`, default `:8081`). Metrics are always on — no configuration is required.
 
 ## Why it exists
 

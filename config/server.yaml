@@ -1,0 +1,8 @@
+grpc_addr:   ":8080"
+health_addr: ":8081"
+admin_addr:  ":8082"
+grpc_reflection: true
+otlp_endpoint: ""
+rate_limit_rps:   0
+rate_limit_burst: 0
+key_rotation_interval: ""

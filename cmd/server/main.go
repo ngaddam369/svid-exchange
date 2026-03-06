@@ -4,15 +4,12 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/hex"
 	"errors"
-	"math"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -34,64 +31,40 @@ import (
 	exchangev1 "github.com/ngaddam369/svid-exchange/proto/exchange/v1"
 )
 
-const (
-	defaultGRPCAddr   = ":8080"
-	defaultHealthAddr = ":8081"
-	defaultAdminAddr  = ":8082"
-	shutdownTimeout   = 10 * time.Second
-)
+const shutdownTimeout = 10 * time.Second
 
 func main() {
 	log := zerolog.New(os.Stdout).With().Timestamp().Str("service", "svid-exchange").Logger()
 
+	cfg, err := loadConfig()
+	if err != nil {
+		log.Fatal().Err(err).Msg("load config")
+	}
+
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
 
-	policyPath := os.Getenv("POLICY_FILE")
-	if policyPath == "" {
-		policyPath = "config/policy.example.yaml"
-	}
-
-	grpcAddr := os.Getenv("GRPC_ADDR")
-	if grpcAddr == "" {
-		grpcAddr = defaultGRPCAddr
-	}
-
-	healthAddr := os.Getenv("HEALTH_ADDR")
-	if healthAddr == "" {
-		healthAddr = defaultHealthAddr
-	}
-
-	adminAddr := os.Getenv("ADMIN_ADDR")
-	if adminAddr == "" {
-		adminAddr = defaultAdminAddr
-	}
-
 	// --- Policy ---
-	pl, err := policy.LoadFile(policyPath)
+	pl, err := policy.LoadFile(cfg.PolicyFile)
 	if err != nil {
-		log.Fatal().Err(err).Str("path", policyPath).Msg("load policy")
+		log.Fatal().Err(err).Str("path", cfg.PolicyFile).Msg("load policy")
 	}
-	log.Info().Str("path", policyPath).Msg("policy loaded")
+	log.Info().Str("path", cfg.PolicyFile).Msg("policy loaded")
 	ap := newAtomicPolicy(pl)
 
 	// --- Policy store (BoltDB) ---
 	// Dynamic policies added via the admin API are persisted here and merged
 	// with the YAML base on startup and after every ReloadPolicy call.
-	policyDBPath := os.Getenv("POLICY_DB")
-	if policyDBPath == "" {
-		policyDBPath = "data/policy.db"
+	if err = os.MkdirAll(filepath.Dir(cfg.PolicyDB), 0o700); err != nil {
+		log.Fatal().Err(err).Str("path", cfg.PolicyDB).Msg("create policy db directory")
 	}
-	if err := os.MkdirAll(filepath.Dir(policyDBPath), 0o700); err != nil {
-		log.Fatal().Err(err).Str("path", policyDBPath).Msg("create policy db directory")
-	}
-	store, err := policy.OpenStore(policyDBPath)
+	store, err := policy.OpenStore(cfg.PolicyDB)
 	if err != nil {
-		log.Fatal().Err(err).Str("path", policyDBPath).Msg("open policy store")
+		log.Fatal().Err(err).Str("path", cfg.PolicyDB).Msg("open policy store")
 	}
-	log.Info().Str("path", policyDBPath).Msg("policy store opened")
+	log.Info().Str("path", cfg.PolicyDB).Msg("policy store opened")
 	// Merge YAML base with any dynamic policies persisted from a previous run.
-	if err := ap.rebuild(store); err != nil {
+	if err = ap.rebuild(store); err != nil {
 		log.Fatal().Err(err).Msg("merge policy store")
 	}
 
@@ -102,19 +75,13 @@ func main() {
 	}
 
 	// --- Signing key rotation ---
-	// KEY_ROTATION_INTERVAL controls how often a new signing key is generated.
+	// key_rotation_interval controls how often a new signing key is generated.
 	// The outgoing key is retained for one interval so that tokens signed just
-	// before a rotation remain verifiable. Unset or empty disables rotation.
-	var rotationInterval time.Duration
-	if v := os.Getenv("KEY_ROTATION_INTERVAL"); v != "" {
-		if rotationInterval, err = time.ParseDuration(v); err != nil {
-			log.Fatal().Err(err).Str("value", v).Msg("invalid KEY_ROTATION_INTERVAL")
-		}
-	}
-	if rotationInterval > 0 {
-		log.Info().Dur("interval", rotationInterval).Msg("signing key rotation enabled")
+	// before a rotation remain verifiable. Zero disables rotation.
+	if cfg.KeyRotationInterval > 0 {
+		log.Info().Dur("interval", cfg.KeyRotationInterval).Msg("signing key rotation enabled")
 		go func() {
-			ticker := time.NewTicker(rotationInterval)
+			ticker := time.NewTicker(cfg.KeyRotationInterval)
 			defer ticker.Stop()
 			for {
 				select {
@@ -132,45 +99,23 @@ func main() {
 	}
 
 	// --- Audit logger ---
-	var auditKey []byte
-	if v := os.Getenv("AUDIT_HMAC_KEY"); v != "" {
-		if auditKey, err = hex.DecodeString(v); err != nil {
-			log.Fatal().Err(err).Msg("invalid AUDIT_HMAC_KEY: must be hex-encoded")
-		}
-		if len(auditKey) != 32 {
-			log.Fatal().Int("bytes", len(auditKey)).Msg("AUDIT_HMAC_KEY must be 32 bytes (64 hex chars)")
-		}
+	if len(cfg.AuditHMACKey) > 0 {
 		log.Info().Msg("audit log HMAC signing enabled")
 	}
-	auditLog := audit.NewWithHMAC(os.Stdout, auditKey)
+	auditLog := audit.NewWithHMAC(os.Stdout, cfg.AuditHMACKey)
 
 	// --- Tracing ---
-	tracingShutdown, err := initTracing(rootCtx)
+	tracingShutdown, err := initTracing(rootCtx, cfg.OTLPEndpoint)
 	if err != nil {
 		log.Fatal().Err(err).Msg("init tracing")
 	}
-	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
-		log.Info().Str("endpoint", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")).Msg("OTLP tracing enabled")
+	if cfg.OTLPEndpoint != "" {
+		log.Info().Str("endpoint", cfg.OTLPEndpoint).Msg("OTLP tracing enabled")
 	}
 
 	// --- Rate limiting ---
-	var rps float64
-	if v := os.Getenv("RATE_LIMIT_RPS"); v != "" {
-		if rps, err = strconv.ParseFloat(v, 64); err != nil {
-			log.Fatal().Err(err).Str("value", v).Msg("invalid RATE_LIMIT_RPS")
-		}
-	}
-	var burst int
-	if v := os.Getenv("RATE_LIMIT_BURST"); v != "" {
-		if burst, err = strconv.Atoi(v); err != nil {
-			log.Fatal().Err(err).Str("value", v).Msg("invalid RATE_LIMIT_BURST")
-		}
-	}
-	if burst <= 0 && rps > 0 {
-		burst = int(math.Ceil(rps))
-	}
-	if rps > 0 {
-		log.Info().Float64("rps", rps).Int("burst", burst).Msg("rate limiting enabled")
+	if cfg.RateLimitRPS > 0 {
+		log.Info().Float64("rps", cfg.RateLimitRPS).Int("burst", cfg.RateLimitBurst).Msg("rate limiting enabled")
 	}
 
 	// --- gRPC server ---
@@ -178,49 +123,44 @@ func main() {
 	// SPIFFE_ENDPOINT_SOCKET must point to the SPIRE Workload API socket.
 	// X509Source fetches and rotates the SVID automatically; every TLS
 	// handshake picks up the latest certificate without a process restart.
-	spiffeSocket := os.Getenv("SPIFFE_ENDPOINT_SOCKET")
-	if spiffeSocket == "" {
-		log.Fatal().Msg("SPIFFE_ENDPOINT_SOCKET must be set")
-	}
-
+	log.Info().Str("socket", cfg.SpiffeSocket).Msg("mTLS via SPIRE Workload API")
 	src, err := workloadapi.NewX509Source(
 		rootCtx,
-		workloadapi.WithClientOptions(workloadapi.WithAddr(spiffeSocket)),
+		workloadapi.WithClientOptions(workloadapi.WithAddr(cfg.SpiffeSocket)),
 	)
 	if err != nil {
-		log.Fatal().Err(err).Str("socket", spiffeSocket).Msg("connect to SPIRE Workload API")
+		log.Fatal().Err(err).Str("socket", cfg.SpiffeSocket).Msg("connect to SPIRE Workload API")
 	}
 
 	tlsCfg := tlsconfig.MTLSServerConfig(src, src, tlsconfig.AuthorizeAny())
 	tlsCfg.MinVersion = tls.VersionTLS13
 
 	metricsInterceptor := initMetrics()
-	rateLimiter := newRateLimitInterceptor(rps, burst)
+	rateLimiter := newRateLimitInterceptor(cfg.RateLimitRPS, cfg.RateLimitBurst)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
 		grpc.UnaryInterceptor(chainUnary(metricsInterceptor, rateLimiter)),
 		newTracingServerOption(),
 	}
-	log.Info().Str("socket", spiffeSocket).Msg("mTLS via SPIRE Workload API")
 
 	grpcServer := grpc.NewServer(serverOpts...)
 	svc := server.New(spiffe.Extractor{}, ap, minter, auditLog)
 	exchangev1.RegisterTokenExchangeServer(grpcServer, svc)
 	registerMetrics(grpcServer)
 
-	if os.Getenv("GRPC_REFLECTION") != "false" {
+	if cfg.GRPCReflection {
 		reflection.Register(grpcServer)
 	}
 
-	grpcLis, err := net.Listen("tcp", grpcAddr)
+	grpcLis, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {
-		log.Fatal().Err(err).Str("addr", grpcAddr).Msg("listen gRPC")
+		log.Fatal().Err(err).Str("addr", cfg.GRPCAddr).Msg("listen gRPC")
 	}
 
 	// reloadPolicy re-reads the YAML file and merges it with dynamic policies.
 	// Called by the ReloadPolicy admin RPC.
 	reloadPolicy := func() error {
-		newPolicy, err := policy.LoadFile(policyPath)
+		newPolicy, err := policy.LoadFile(cfg.PolicyFile)
 		if err != nil {
 			return err
 		}
@@ -229,18 +169,18 @@ func main() {
 	}
 
 	// --- Admin gRPC server ---
-	// Separate listener on ADMIN_ADDR so it can be network-restricted
+	// Separate listener on admin_addr so it can be network-restricted
 	// independently of the data-plane gRPC port.
 	// Uses the same mTLS credentials as the data-plane server.
 	adminServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)))
 	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap, reloadPolicy)
 	adminv1.RegisterPolicyAdminServer(adminServer, adminSvc)
-	if os.Getenv("GRPC_REFLECTION") != "false" {
+	if cfg.GRPCReflection {
 		reflection.Register(adminServer)
 	}
-	adminLis, err := net.Listen("tcp", adminAddr)
+	adminLis, err := net.Listen("tcp", cfg.AdminAddr)
 	if err != nil {
-		log.Fatal().Err(err).Str("addr", adminAddr).Msg("listen admin gRPC")
+		log.Fatal().Err(err).Str("addr", cfg.AdminAddr).Msg("listen admin gRPC")
 	}
 
 	// --- Health HTTP server ---
@@ -260,27 +200,27 @@ func main() {
 	mux.HandleFunc("/jwks", newJWKSHandler(minter, log))
 	mux.Handle("/metrics", newMetricsHandler())
 	healthServer := &http.Server{
-		Addr:    healthAddr,
+		Addr:    cfg.HealthAddr,
 		Handler: mux,
 	}
 
 	// --- Start ---
 	go func() {
-		log.Info().Str("addr", grpcAddr).Msg("gRPC listening")
+		log.Info().Str("addr", cfg.GRPCAddr).Msg("gRPC listening")
 		if err := grpcServer.Serve(grpcLis); err != nil {
 			log.Error().Err(err).Msg("gRPC serve error")
 		}
 	}()
 
 	go func() {
-		log.Info().Str("addr", adminAddr).Msg("admin gRPC listening")
+		log.Info().Str("addr", cfg.AdminAddr).Msg("admin gRPC listening")
 		if err := adminServer.Serve(adminLis); err != nil {
 			log.Error().Err(err).Msg("admin gRPC serve error")
 		}
 	}()
 
 	go func() {
-		log.Info().Str("addr", healthAddr).Msg("health HTTP listening")
+		log.Info().Str("addr", cfg.HealthAddr).Msg("health HTTP listening")
 		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error().Err(err).Msg("health serve error")
 		}
