@@ -100,7 +100,7 @@ func (s *Server) DeletePolicy(_ context.Context, req *adminv1.DeletePolicyReques
 	for _, yp := range yaml {
 		if yp.Name == req.Name {
 			return nil, status.Errorf(codes.FailedPrecondition,
-				"policy %q is defined in the YAML file and cannot be deleted via the API; edit the file and send SIGHUP", req.Name)
+				"policy %q is defined in the YAML file and cannot be deleted via the API; edit the file and call ReloadPolicy", req.Name)
 		}
 	}
 
@@ -138,8 +138,8 @@ func (s *Server) DeletePolicy(_ context.Context, req *adminv1.DeletePolicyReques
 }
 
 // ReloadPolicy re-reads the YAML policy file from disk and merges it with all
-// dynamic policies, exactly as SIGHUP does. If the file is invalid the active
-// policy is unchanged and an Internal error is returned.
+// dynamic policies atomically. If the file is invalid the active policy is
+// unchanged and an Internal error is returned.
 func (s *Server) ReloadPolicy(_ context.Context, _ *adminv1.ReloadPolicyRequest) (*adminv1.ReloadPolicyResponse, error) {
 	if err := s.reload(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())

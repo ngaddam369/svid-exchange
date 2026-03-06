@@ -10,11 +10,11 @@ import (
 // atomicPolicy is a PolicyEvaluator whose underlying policy can be swapped
 // atomically at runtime without disrupting in-flight requests.
 // It also tracks the YAML-sourced base policies separately from dynamic
-// policies so that SIGHUP reloads and the admin API can merge them correctly.
+// policies so that the ReloadPolicy RPC and the admin API can merge them correctly.
 type atomicPolicy struct {
 	ptr  atomic.Pointer[policy.Loader]
 	mu   sync.RWMutex
-	base []policy.Policy // YAML-sourced policies; updated on SIGHUP
+	base []policy.Policy // YAML-sourced policies; updated on ReloadPolicy
 }
 
 func newAtomicPolicy(initial *policy.Loader) *atomicPolicy {
@@ -33,8 +33,8 @@ func (ap *atomicPolicy) swap(p *policy.Loader) {
 	ap.ptr.Store(p)
 }
 
-// setBase updates the YAML-sourced base policies. Called on SIGHUP after a
-// successful file reload, before rebuilding the merged loader.
+// setBase updates the YAML-sourced base policies. Called after a successful
+// file reload, before rebuilding the merged loader.
 func (ap *atomicPolicy) setBase(ps []policy.Policy) {
 	ap.mu.Lock()
 	ap.base = ps

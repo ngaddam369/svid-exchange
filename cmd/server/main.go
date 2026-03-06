@@ -77,7 +77,7 @@ func main() {
 
 	// --- Policy store (BoltDB) ---
 	// Dynamic policies added via the admin API are persisted here and merged
-	// with the YAML base on startup and after every SIGHUP reload.
+	// with the YAML base on startup and after every ReloadPolicy call.
 	policyDBPath := os.Getenv("POLICY_DB")
 	if policyDBPath == "" {
 		policyDBPath = "data/policy.db"
@@ -217,9 +217,8 @@ func main() {
 		log.Fatal().Err(err).Str("addr", grpcAddr).Msg("listen gRPC")
 	}
 
-	// --- Policy hot-reload closure ---
 	// reloadPolicy re-reads the YAML file and merges it with dynamic policies.
-	// Called by both SIGHUP and the ReloadPolicy admin RPC.
+	// Called by the ReloadPolicy admin RPC.
 	reloadPolicy := func() error {
 		newPolicy, err := policy.LoadFile(policyPath)
 		if err != nil {
@@ -265,27 +264,6 @@ func main() {
 		Handler: mux,
 	}
 
-	// --- Policy hot-reload ---
-	// Send SIGHUP to reload the policy file without restarting the process.
-	// If the new file is invalid the existing policy stays active.
-	// Dynamic policies from the store are preserved across reloads.
-	hup := make(chan os.Signal, 1)
-	signal.Notify(hup, syscall.SIGHUP)
-	go func() {
-		for {
-			select {
-			case <-hup:
-				if err := reloadPolicy(); err != nil {
-					log.Error().Err(err).Str("path", policyPath).Msg("policy reload failed, keeping existing policy")
-					continue
-				}
-				log.Info().Str("path", policyPath).Msg("policy reloaded")
-			case <-rootCtx.Done():
-				return
-			}
-		}
-	}()
-
 	// --- Start ---
 	go func() {
 		log.Info().Str("addr", grpcAddr).Msg("gRPC listening")
@@ -315,8 +293,7 @@ func main() {
 
 	log.Info().Msg("shutting down")
 	ready.Store(false)
-	signal.Stop(hup)
-	rootCancel()               // stop Workload API watcher + SIGHUP goroutine
+	rootCancel()               // stop Workload API watcher
 	grpcServer.GracefulStop()  // drain in-flight RPCs (source still serves from cache)
 	adminServer.GracefulStop() // drain in-flight admin RPCs
 	if err := store.Close(); err != nil {

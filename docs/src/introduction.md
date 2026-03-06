@@ -37,4 +37,4 @@ caller (SVID)  →  svid-exchange  →  scoped JWT  →  target service
 - **Replay protection** — every minted JTI is tracked server-side; duplicate token IDs are rejected before reaching the caller
 - **Token revocation** — an in-memory revocation list permanently denies specific JTIs within their TTL
 - **Dynamic policy management** — add or remove policies at runtime via the admin gRPC API without restarting; changes are persisted in BoltDB and survive restarts
-- **Policy hot-reload** — send `SIGHUP` to reload the YAML policy file atomically; dynamic policies are preserved across reloads
+- **Policy hot-reload** — call `ReloadPolicy` on the admin gRPC API to reload the YAML policy file atomically; dynamic policies are preserved across reloads

@@ -92,23 +92,16 @@ The server (and the `svid-exchange-validate` CLI) reject policy files that conta
 
 ### Hot-reload
 
-Send `SIGHUP` to reload the policy file without restarting the process:
+Call `ReloadPolicy` on the admin gRPC API to reload the policy file without restarting the process:
 
 ```bash
-kill -HUP $(pidof svid-exchange)
+grpcurl -insecure \
+  -cert /path/to/client.pem -key /path/to/client.key \
+  -proto proto/admin/v1/admin.proto \
+  localhost:8082 admin.v1.PolicyAdmin/ReloadPolicy
 ```
 
-On a successful reload, the server logs:
-
-```
-{"message":"policy reloaded","path":"config/policy.yaml"}
-```
-
-If the new file fails validation, the existing policy stays active and an error is logged — no requests are disrupted:
-
-```
-{"level":"error","message":"policy reload failed, keeping existing policy","error":"..."}
-```
+If the new file fails validation, the existing policy stays active and the RPC returns an `INTERNAL` error — no requests are disrupted.
 
 The swap is atomic: in-flight requests finish against the old policy, and all subsequent requests see the new policy immediately. There is no window where a request can observe a partially-loaded policy.
 

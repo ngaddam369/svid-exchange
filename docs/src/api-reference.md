@@ -124,7 +124,7 @@ grpcurl \
 
 ### DeletePolicy
 
-Removes a dynamic policy by name. YAML-sourced policies cannot be deleted via the API — edit the YAML file and call `ReloadPolicy` (or send `SIGHUP`) instead.
+Removes a dynamic policy by name. YAML-sourced policies cannot be deleted via the API — edit the YAML file and call `ReloadPolicy` instead.
 
 ```protobuf
 rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
@@ -172,7 +172,7 @@ grpcurl \
 
 ### ReloadPolicy
 
-Re-reads the YAML policy file from disk and merges it with all dynamic policies, exactly as `SIGHUP` does. Use this in production environments where OS-level process access is restricted or unavailable.
+Re-reads the YAML policy file from disk and merges it with all dynamic policies atomically.
 
 ```protobuf
 rpc ReloadPolicy(ReloadPolicyRequest) returns (ReloadPolicyResponse);
@@ -182,7 +182,6 @@ rpc ReloadPolicy(ReloadPolicyRequest) returns (ReloadPolicyResponse);
 - Re-reads `POLICY_FILE` from disk and validates its contents.
 - If valid, atomically replaces the active YAML policy set and merges with all dynamic policies from the store.
 - If the file is invalid, the currently active policy is unchanged and an error is returned.
-- `SIGHUP` remains available as a fallback (both paths call the same reload logic).
 
 **Status codes:**
 

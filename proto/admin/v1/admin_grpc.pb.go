@@ -41,16 +41,15 @@ type PolicyAdminClient interface {
 	// DeletePolicy removes a dynamic policy by name.
 	// Returns NOT_FOUND if the policy does not exist in the dynamic store.
 	// Returns FAILED_PRECONDITION if the policy was loaded from the YAML file
-	// (YAML policies can only be removed by editing the file and calling ReloadPolicy or sending SIGHUP).
+	// (YAML policies can only be removed by editing the file and calling ReloadPolicy).
 	DeletePolicy(ctx context.Context, in *DeletePolicyRequest, opts ...grpc.CallOption) (*DeletePolicyResponse, error)
 	// ListPolicies returns all active policies — both YAML-sourced and dynamic.
 	// Each entry includes a source field ("yaml" or "dynamic") so callers can
 	// distinguish policies that originated from the file versus the API.
 	ListPolicies(ctx context.Context, in *ListPoliciesRequest, opts ...grpc.CallOption) (*ListPoliciesResponse, error)
 	// ReloadPolicy re-reads the YAML policy file from disk and merges it with
-	// all dynamic policies, exactly as SIGHUP does. Use this instead of sending
-	// a signal in production environments. If the file is invalid the active
-	// policy is unchanged and an error is returned.
+	// all dynamic policies atomically. If the file is invalid the active policy
+	// is unchanged and an error is returned.
 	ReloadPolicy(ctx context.Context, in *ReloadPolicyRequest, opts ...grpc.CallOption) (*ReloadPolicyResponse, error)
 }
 
@@ -118,16 +117,15 @@ type PolicyAdminServer interface {
 	// DeletePolicy removes a dynamic policy by name.
 	// Returns NOT_FOUND if the policy does not exist in the dynamic store.
 	// Returns FAILED_PRECONDITION if the policy was loaded from the YAML file
-	// (YAML policies can only be removed by editing the file and calling ReloadPolicy or sending SIGHUP).
+	// (YAML policies can only be removed by editing the file and calling ReloadPolicy).
 	DeletePolicy(context.Context, *DeletePolicyRequest) (*DeletePolicyResponse, error)
 	// ListPolicies returns all active policies — both YAML-sourced and dynamic.
 	// Each entry includes a source field ("yaml" or "dynamic") so callers can
 	// distinguish policies that originated from the file versus the API.
 	ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error)
 	// ReloadPolicy re-reads the YAML policy file from disk and merges it with
-	// all dynamic policies, exactly as SIGHUP does. Use this instead of sending
-	// a signal in production environments. If the file is invalid the active
-	// policy is unchanged and an error is returned.
+	// all dynamic policies atomically. If the file is invalid the active policy
+	// is unchanged and an error is returned.
 	ReloadPolicy(context.Context, *ReloadPolicyRequest) (*ReloadPolicyResponse, error)
 	mustEmbedUnimplementedPolicyAdminServer()
 }
