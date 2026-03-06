@@ -15,6 +15,7 @@
 | `AUDIT_HMAC_KEY` | — | No | Hex-encoded 32-byte key for audit log HMAC signing. Must be exactly 64 hex characters. Unset disables signing. |
 | `ADMIN_ADDR` | `:8082` | No | Admin gRPC listen address for the dynamic policy API. Should be network-restricted to administrative clients only. |
 | `POLICY_DB` | `data/policy.db` | No | Path to the BoltDB file used to persist dynamic policies created via the admin API. The parent directory is created automatically. |
+| `KEY_ROTATION_INTERVAL` | — | No | How often to rotate the signing key (e.g. `24h`, `12h`). The outgoing key is retained for one interval so that tokens issued just before a rotation remain verifiable. Must be ≥ the largest `max_ttl` across all policies — see [TTL and rotation interval](security.md#ttl-and-rotation-interval). Unset or empty disables automatic rotation. |
 
 ## HTTP endpoints
 

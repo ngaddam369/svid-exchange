@@ -49,6 +49,32 @@ Tokens issued by svid-exchange are ES256 JWTs with the following security proper
 
 The signing key is an ephemeral ES256 key pair generated at startup. The corresponding public key is served at `/jwks` for downstream verification.
 
+When `KEY_ROTATION_INTERVAL` is set, the minter generates a new key on that schedule. The outgoing key is retained and continues to appear in the `/jwks` response for one full interval, so tokens signed just before a rotation remain verifiable until they expire naturally. After the next rotation the old key is evicted — at most two keys are ever active at once. This bounds the exposure window of any single private key to one rotation interval.
+
+### TTL and rotation interval
+
+Token TTL and the rotation interval are independent settings, but they must be chosen together or a verification gap opens.
+
+When a token is minted it is signed with the **current** key. That key survives in `/jwks` for exactly one rotation interval after it is displaced. A token minted at the start of an interval is still alive when the **second** rotation fires — and the key that signed it has just been evicted. Any downstream verifier that fetches `/jwks` at that point will find no key that validates the signature.
+
+The safety invariant is:
+
+```
+KEY_ROTATION_INTERVAL  ≥  max_ttl (across all policies)
+```
+
+If the interval is shorter than the longest `max_ttl` in the policy file, tokens can outlive their signing key and become unverifiable before they expire. svid-exchange does not enforce this automatically; the operator is responsible for setting both values consistently.
+
+Practical guidance:
+
+| Policy `max_ttl` | Minimum `KEY_ROTATION_INTERVAL` | Typical production choice |
+|---|---|---|
+| 300 s (5 min) | 5 min | 24 h |
+| 3 600 s (1 h) | 1 h | 12 h or 24 h |
+| 86 400 s (1 day) | 24 h | 48 h |
+
+> **Note:** The demo stack sets `KEY_ROTATION_INTERVAL=5s` with a policy `max_ttl` of 300 s solely to make the rotation mechanism visible during local testing. That combination is intentionally broken for demonstration purposes and must not be used in production.
+
 ## Replay protection
 
 After a token is minted, its `jti` (JWT ID) is recorded in an in-memory cache keyed by `jti → expiry`. On every subsequent `Exchange()` call, the freshly minted `jti` is checked against this cache before the response is returned:

@@ -1,26 +1,22 @@
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/ngaddam369/svid-exchange/internal/token"
+	"github.com/rs/zerolog"
 )
 
 func TestNewJWKSHandler(t *testing.T) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	m, err := token.NewMinter()
 	if err != nil {
-		t.Fatalf("generate key: %v", err)
+		t.Fatalf("NewMinter: %v", err)
 	}
-
-	h, err := newJWKSHandler(&key.PublicKey)
-	if err != nil {
-		t.Fatalf("newJWKSHandler: %v", err)
-	}
+	h := newJWKSHandler(m, zerolog.Nop())
 
 	tests := []struct {
 		name  string
@@ -148,5 +144,56 @@ func TestNewJWKSHandler(t *testing.T) {
 
 			tc.check(t, resp)
 		})
+	}
+}
+
+func TestJWKSHandlerAfterRotation(t *testing.T) {
+	m, err := token.NewMinter()
+	if err != nil {
+		t.Fatalf("NewMinter: %v", err)
+	}
+	h := newJWKSHandler(m, zerolog.Nop())
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	get := func(t *testing.T) jwkSet {
+		t.Helper()
+		resp, err := http.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		defer resp.Body.Close()
+		var doc jwkSet
+		if err = json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return doc
+	}
+
+	before := get(t)
+	if len(before.Keys) != 1 {
+		t.Fatalf("before rotation: got %d keys, want 1", len(before.Keys))
+	}
+	kidBefore := before.Keys[0].Kid
+
+	if err = m.Rotate(); err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+
+	after := get(t)
+	if len(after.Keys) != 2 {
+		t.Fatalf("after rotation: got %d keys, want 2", len(after.Keys))
+	}
+
+	// The pre-rotation kid must still be present so in-flight tokens remain verifiable.
+	found := false
+	for _, k := range after.Keys {
+		if k.Kid == kidBefore {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("pre-rotation kid not present in post-rotation JWKS")
 	}
 }

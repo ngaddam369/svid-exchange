@@ -105,6 +105,7 @@ services:
       RATE_LIMIT_RPS:         "${RATE_LIMIT_RPS:-}"
       RATE_LIMIT_BURST:       "${RATE_LIMIT_BURST:-}"
       AUDIT_HMAC_KEY:         "${AUDIT_HMAC_KEY:-}"    # hex-encoded 32-byte key; unset = no signing
+      KEY_ROTATION_INTERVAL:  "${KEY_ROTATION_INTERVAL:-}"   # e.g. 24h; unset = no rotation
     volumes:
       - ./config/policy.example.yaml:/config/policy.example.yaml:ro
       - spire-sockets:/opt/spire/sockets

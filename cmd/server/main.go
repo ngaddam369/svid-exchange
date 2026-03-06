@@ -101,6 +101,36 @@ func main() {
 		log.Fatal().Err(err).Msg("init minter")
 	}
 
+	// --- Signing key rotation ---
+	// KEY_ROTATION_INTERVAL controls how often a new signing key is generated.
+	// The outgoing key is retained for one interval so that tokens signed just
+	// before a rotation remain verifiable. Unset or empty disables rotation.
+	var rotationInterval time.Duration
+	if v := os.Getenv("KEY_ROTATION_INTERVAL"); v != "" {
+		if rotationInterval, err = time.ParseDuration(v); err != nil {
+			log.Fatal().Err(err).Str("value", v).Msg("invalid KEY_ROTATION_INTERVAL")
+		}
+	}
+	if rotationInterval > 0 {
+		log.Info().Dur("interval", rotationInterval).Msg("signing key rotation enabled")
+		go func() {
+			ticker := time.NewTicker(rotationInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if err := minter.Rotate(); err != nil {
+						log.Error().Err(err).Msg("signing key rotation failed")
+						continue
+					}
+					log.Info().Msg("signing key rotated")
+				case <-rootCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+
 	// --- Audit logger ---
 	var auditKey []byte
 	if v := os.Getenv("AUDIT_HMAC_KEY"); v != "" {
@@ -216,11 +246,7 @@ func main() {
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
-	jwksH, err := newJWKSHandler(minter.PublicKey())
-	if err != nil {
-		log.Fatal().Err(err).Msg("build JWKS handler")
-	}
-	mux.HandleFunc("/jwks", jwksH)
+	mux.HandleFunc("/jwks", newJWKSHandler(minter, log))
 	mux.Handle("/metrics", newMetricsHandler())
 	healthServer := &http.Server{
 		Addr:    healthAddr,

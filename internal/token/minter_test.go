@@ -20,7 +20,7 @@ func newTestMinter(t *testing.T) *Minter {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	return newMinterFromKey(key)
+	return &Minter{current: key}
 }
 
 func parseClaims(t *testing.T, m *Minter, tokenStr string) jwt.MapClaims {
@@ -136,6 +136,70 @@ func TestMint(t *testing.T) {
 			seen[r.TokenID] = true
 		}
 	})
+}
+
+func TestRotate(t *testing.T) {
+	m := newTestMinter(t)
+
+	if got := len(m.PublicKeys()); got != 1 {
+		t.Fatalf("before rotation: got %d keys, want 1", got)
+	}
+
+	prevKey := m.PublicKey()
+
+	if err := m.Rotate(); err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+
+	// After first rotation both keys must be served.
+	keys := m.PublicKeys()
+	if len(keys) != 2 {
+		t.Fatalf("after first rotation: got %d keys, want 2", len(keys))
+	}
+	if m.PublicKey() == prevKey {
+		t.Error("current key unchanged after rotation")
+	}
+	found := false
+	for _, k := range keys {
+		if k == prevKey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("previous key not found in PublicKeys after rotation")
+	}
+
+	// Tokens minted before rotation must still be verifiable with the old key.
+	m2 := newTestMinter(t)
+	result, err := m2.Mint("spiffe://a", "spiffe://b", []string{"r"}, 60)
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	oldPub := m2.PublicKey()
+	if err = m2.Rotate(); err != nil {
+		t.Fatalf("Rotate m2: %v", err)
+	}
+	_, err = jwt.Parse(result.Token, func(tok *jwt.Token) (any, error) {
+		return oldPub, nil
+	})
+	if err != nil {
+		t.Errorf("pre-rotation token unverifiable with old key: %v", err)
+	}
+
+	// Second rotation evicts the oldest key; at most two keys active at once.
+	if err = m.Rotate(); err != nil {
+		t.Fatalf("second Rotate: %v", err)
+	}
+	keys = m.PublicKeys()
+	if len(keys) != 2 {
+		t.Fatalf("after second rotation: got %d keys, want 2", len(keys))
+	}
+	for _, k := range keys {
+		if k == prevKey {
+			t.Error("evicted key still in PublicKeys after second rotation")
+		}
+	}
 }
 
 func TestTokenValidation(t *testing.T) {

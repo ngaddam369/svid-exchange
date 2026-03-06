@@ -7,7 +7,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/rs/zerolog"
 )
+
+// keyProvider returns the set of currently active public signing keys.
+// During a rotation window more than one key may be active.
+type keyProvider interface {
+	PublicKeys() []*ecdsa.PublicKey
+}
 
 // jwkKey is a single JSON Web Key (RFC 7517).
 type jwkKey struct {
@@ -25,15 +33,42 @@ type jwkSet struct {
 	Keys []jwkKey `json:"keys"`
 }
 
-// newJWKSHandler builds an http.HandlerFunc that serves the public key as a
-// JWKS document. The response body is computed once at startup and reused for
-// every request. kid is the RFC 7638 SHA-256 thumbprint of the key.
-func newJWKSHandler(pub *ecdsa.PublicKey) (http.HandlerFunc, error) {
+// newJWKSHandler returns an http.HandlerFunc that serves all active public keys
+// as a JWKS document. The response is computed on each request so that key
+// rotations are reflected immediately without a server restart.
+func newJWKSHandler(kp keyProvider, log zerolog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		set := jwkSet{Keys: make([]jwkKey, 0)}
+		for _, pub := range kp.PublicKeys() {
+			k, err := pubToJWK(pub)
+			if err != nil {
+				log.Error().Err(err).Msg("jwks: build key entry")
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			set.Keys = append(set.Keys, k)
+		}
+		body, err := json.Marshal(set)
+		if err != nil {
+			log.Error().Err(err).Msg("jwks: marshal response")
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err = w.Write(body); err != nil {
+			log.Error().Err(err).Msg("jwks: write response")
+		}
+	}
+}
+
+// pubToJWK converts an ECDSA P-256 public key to a JSON Web Key.
+// kid is the RFC 7638 SHA-256 thumbprint of the key.
+func pubToJWK(pub *ecdsa.PublicKey) (jwkKey, error) {
 	// pub.Bytes() returns the uncompressed point: 0x04 || X || Y.
 	// Each coordinate is byteLen bytes (32 for P-256).
 	raw, err := pub.Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("encode public key: %w", err)
+		return jwkKey{}, fmt.Errorf("encode public key: %w", err)
 	}
 	byteLen := (len(raw) - 1) / 2
 	x := base64.RawURLEncoding.EncodeToString(raw[1 : 1+byteLen])
@@ -49,12 +84,12 @@ func newJWKSHandler(pub *ecdsa.PublicKey) (http.HandlerFunc, error) {
 	}
 	thumbJSON, err := json.Marshal(thumbInput{Crv: "P-256", Kty: "EC", X: x, Y: y})
 	if err != nil {
-		return nil, fmt.Errorf("marshal JWKS thumbprint: %w", err)
+		return jwkKey{}, fmt.Errorf("marshal thumbprint: %w", err)
 	}
 	sum := sha256.Sum256(thumbJSON)
 	kid := base64.RawURLEncoding.EncodeToString(sum[:])
 
-	body, err := json.Marshal(jwkSet{Keys: []jwkKey{{
+	return jwkKey{
 		Kty: "EC",
 		Crv: "P-256",
 		X:   x,
@@ -62,14 +97,5 @@ func newJWKSHandler(pub *ecdsa.PublicKey) (http.HandlerFunc, error) {
 		Alg: "ES256",
 		Use: "sig",
 		Kid: kid,
-	}}})
-	if err != nil {
-		return nil, fmt.Errorf("marshal JWKS body: %w", err)
-	}
-
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, err := w.Write(body)
-		_ = err // response write errors are not actionable in a handler
 	}, nil
 }

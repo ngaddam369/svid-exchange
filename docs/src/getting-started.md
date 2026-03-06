@@ -30,15 +30,16 @@ To start with all opt-in security features enabled, generate the required keys f
 # Generate a 32-byte HMAC key for audit log signing
 export AUDIT_HMAC_KEY=$(openssl rand -hex 32)
 
-# Start the stack with HMAC signing and rate limiting active
-AUDIT_HMAC_KEY=$AUDIT_HMAC_KEY RATE_LIMIT_RPS=10 RATE_LIMIT_BURST=10 docker compose up --build -d
+# Start the stack with HMAC signing, rate limiting, and 24h key rotation active
+AUDIT_HMAC_KEY=$AUDIT_HMAC_KEY RATE_LIMIT_RPS=10 RATE_LIMIT_BURST=10 KEY_ROTATION_INTERVAL=24h docker compose up --build -d
 ```
 
-With both features active, svid-exchange additionally logs:
+With those features active, svid-exchange additionally logs:
 
 ```
 {"message":"audit log HMAC signing enabled"}
 {"message":"rate limiting enabled","rps":10,"burst":10}
+{"message":"signing key rotation enabled","interval":"24h0m0s"}
 ```
 
 Confirm it is healthy:
