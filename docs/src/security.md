@@ -143,7 +143,7 @@ A runtime revocation list complements the replay cache. An explicitly revoked `j
 
 The check runs before the replay cache: if the freshly minted `jti` is on the revocation list, the call returns `PermissionDenied`.
 
-The revocation list is populated via `server.Revoke(jti string)`. The list starts empty and lives only in memory; entries are not persisted across restarts. A future endpoint on the admin service will provide an external interface to manage the revocation list at runtime.
+Use `RevokeToken` on the admin gRPC API (`:8082`) to revoke a token by its `jti`. Pass the token's `expires_at` Unix timestamp (from the original `ExchangeResponse`) so the server can purge the entry automatically after the token has expired naturally. Revocations are persisted in BoltDB and survive server restarts — all non-expired entries are restored into the in-memory list on startup. Use `ListRevokedTokens` to inspect the currently active revocations.
 
 ## Rate limiting
 

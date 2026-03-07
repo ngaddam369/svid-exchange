@@ -40,10 +40,12 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 |------|-----------|
 | `OK` | Exchange successful |
 | `UNAUTHENTICATED` | No valid SPIFFE ID found in the peer certificate |
-| `INVALID_ARGUMENT` | `target_service` is empty, or no scopes were requested |
+| `INVALID_ARGUMENT` | `target_service` is empty, no scopes were requested, or `on_behalf_of` is a malformed JWT |
 | `PERMISSION_DENIED` | No policy permits this subject → target exchange, or the minted token ID has been revoked |
 | `ALREADY_EXISTS` | The minted token ID was already issued (replay detected) |
 | `RESOURCE_EXHAUSTED` | Per-identity rate limit exceeded (only when `RATE_LIMIT_RPS` is set) |
+| `CANCELLED` | Client cancelled the request before the exchange completed |
+| `DEADLINE_EXCEEDED` | Request deadline expired before the exchange completed |
 | `INTERNAL` | JWT signing failed (should not occur in normal operation) |
 
 #### Example (grpcurl)
@@ -200,6 +202,62 @@ grpcurl \
   -key  /tmp/svid/svid.N.key \
   -proto proto/admin/v1/admin.proto \
   localhost:8082 admin.v1.PolicyAdmin/ReloadPolicy
+```
+
+### RevokeToken
+
+Permanently denies a specific token before its natural expiry. The revocation is persisted in BoltDB and the in-memory revocation list on the exchange server is updated immediately, so subsequent calls that would produce the same `jti` are rejected without a restart. On startup, all non-expired revocations are restored from the store into the in-memory list automatically.
+
+```protobuf
+rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
+```
+
+**Request fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token_id` | string | The `jti` claim of the token to revoke (from `ExchangeResponse.token_id`) |
+| `expires_at` | int64 | Unix timestamp when the token expires naturally (from `ExchangeResponse.expires_at`); used to purge stale entries automatically |
+
+**Status codes:**
+
+| Code | Condition |
+|------|-----------|
+| `OK` | Token revoked and persisted |
+| `INVALID_ARGUMENT` | `token_id` is empty or `expires_at` is not positive |
+| `INTERNAL` | BoltDB write failed |
+
+#### Example (grpcurl)
+
+```bash
+grpcurl \
+  -insecure \
+  -cert /tmp/svid/svid.N.pem \
+  -key  /tmp/svid/svid.N.key \
+  -proto proto/admin/v1/admin.proto \
+  -d '{"token_id": "<jti>", "expires_at": <unix_timestamp>}' \
+  localhost:8082 admin.v1.PolicyAdmin/RevokeToken
+```
+
+### ListRevokedTokens
+
+Returns all tokens that have been explicitly revoked and have not yet expired naturally. Expired entries are excluded from the response; they are cleaned up from the store automatically on the next server startup.
+
+```protobuf
+rpc ListRevokedTokens(ListRevokedTokensRequest) returns (ListRevokedTokensResponse);
+```
+
+Each entry in the response includes `token_id` (the `jti`) and `expires_at` (the Unix timestamp of the token's natural expiry).
+
+#### Example (grpcurl)
+
+```bash
+grpcurl \
+  -insecure \
+  -cert /tmp/svid/svid.N.pem \
+  -key  /tmp/svid/svid.N.key \
+  -proto proto/admin/v1/admin.proto \
+  localhost:8082 admin.v1.PolicyAdmin/ListRevokedTokens
 ```
 
 ---

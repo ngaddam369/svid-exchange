@@ -29,6 +29,14 @@ service PolicyAdmin {
   // all dynamic policies atomically. If the file is invalid the active policy
   // is unchanged and an error is returned.
   rpc ReloadPolicy(ReloadPolicyRequest) returns (ReloadPolicyResponse);
+
+  // RevokeToken permanently denies a specific token ID before its natural
+  // expiry. The revocation is persisted in BoltDB and survives server restarts.
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
+
+  // ListRevokedTokens returns all tokens that have been explicitly revoked and
+  // have not yet reached their natural expiry.
+  rpc ListRevokedTokens(ListRevokedTokensRequest) returns (ListRevokedTokensResponse);
 }
 
 // PolicyRule mirrors the YAML policy structure.
@@ -80,3 +88,26 @@ message ListPoliciesResponse {
 message ReloadPolicyRequest {}
 
 message ReloadPolicyResponse {}
+
+message RevokeTokenRequest {
+  // token_id is the jti claim of the token to revoke (from ExchangeResponse.token_id).
+  string token_id = 1;
+
+  // expires_at is the Unix timestamp when the token expires naturally
+  // (from ExchangeResponse.expires_at). Used to purge stale entries automatically.
+  int64 expires_at = 2;
+}
+
+message RevokeTokenResponse {}
+
+message ListRevokedTokensRequest {}
+
+// RevokedToken holds the token ID and its natural expiry.
+message RevokedToken {
+  string token_id  = 1;
+  int64  expires_at = 2;
+}
+
+message ListRevokedTokensResponse {
+  repeated RevokedToken tokens = 1;
+}

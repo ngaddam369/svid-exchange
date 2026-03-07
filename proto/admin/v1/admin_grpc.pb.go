@@ -19,10 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PolicyAdmin_CreatePolicy_FullMethodName = "/admin.v1.PolicyAdmin/CreatePolicy"
-	PolicyAdmin_DeletePolicy_FullMethodName = "/admin.v1.PolicyAdmin/DeletePolicy"
-	PolicyAdmin_ListPolicies_FullMethodName = "/admin.v1.PolicyAdmin/ListPolicies"
-	PolicyAdmin_ReloadPolicy_FullMethodName = "/admin.v1.PolicyAdmin/ReloadPolicy"
+	PolicyAdmin_CreatePolicy_FullMethodName      = "/admin.v1.PolicyAdmin/CreatePolicy"
+	PolicyAdmin_DeletePolicy_FullMethodName      = "/admin.v1.PolicyAdmin/DeletePolicy"
+	PolicyAdmin_ListPolicies_FullMethodName      = "/admin.v1.PolicyAdmin/ListPolicies"
+	PolicyAdmin_ReloadPolicy_FullMethodName      = "/admin.v1.PolicyAdmin/ReloadPolicy"
+	PolicyAdmin_RevokeToken_FullMethodName       = "/admin.v1.PolicyAdmin/RevokeToken"
+	PolicyAdmin_ListRevokedTokens_FullMethodName = "/admin.v1.PolicyAdmin/ListRevokedTokens"
 )
 
 // PolicyAdminClient is the client API for PolicyAdmin service.
@@ -51,6 +53,12 @@ type PolicyAdminClient interface {
 	// all dynamic policies atomically. If the file is invalid the active policy
 	// is unchanged and an error is returned.
 	ReloadPolicy(ctx context.Context, in *ReloadPolicyRequest, opts ...grpc.CallOption) (*ReloadPolicyResponse, error)
+	// RevokeToken permanently denies a specific token ID before its natural
+	// expiry. The revocation is persisted in BoltDB and survives server restarts.
+	RevokeToken(ctx context.Context, in *RevokeTokenRequest, opts ...grpc.CallOption) (*RevokeTokenResponse, error)
+	// ListRevokedTokens returns all tokens that have been explicitly revoked and
+	// have not yet reached their natural expiry.
+	ListRevokedTokens(ctx context.Context, in *ListRevokedTokensRequest, opts ...grpc.CallOption) (*ListRevokedTokensResponse, error)
 }
 
 type policyAdminClient struct {
@@ -101,6 +109,26 @@ func (c *policyAdminClient) ReloadPolicy(ctx context.Context, in *ReloadPolicyRe
 	return out, nil
 }
 
+func (c *policyAdminClient) RevokeToken(ctx context.Context, in *RevokeTokenRequest, opts ...grpc.CallOption) (*RevokeTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeTokenResponse)
+	err := c.cc.Invoke(ctx, PolicyAdmin_RevokeToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *policyAdminClient) ListRevokedTokens(ctx context.Context, in *ListRevokedTokensRequest, opts ...grpc.CallOption) (*ListRevokedTokensResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRevokedTokensResponse)
+	err := c.cc.Invoke(ctx, PolicyAdmin_ListRevokedTokens_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PolicyAdminServer is the server API for PolicyAdmin service.
 // All implementations must embed UnimplementedPolicyAdminServer
 // for forward compatibility.
@@ -127,6 +155,12 @@ type PolicyAdminServer interface {
 	// all dynamic policies atomically. If the file is invalid the active policy
 	// is unchanged and an error is returned.
 	ReloadPolicy(context.Context, *ReloadPolicyRequest) (*ReloadPolicyResponse, error)
+	// RevokeToken permanently denies a specific token ID before its natural
+	// expiry. The revocation is persisted in BoltDB and survives server restarts.
+	RevokeToken(context.Context, *RevokeTokenRequest) (*RevokeTokenResponse, error)
+	// ListRevokedTokens returns all tokens that have been explicitly revoked and
+	// have not yet reached their natural expiry.
+	ListRevokedTokens(context.Context, *ListRevokedTokensRequest) (*ListRevokedTokensResponse, error)
 	mustEmbedUnimplementedPolicyAdminServer()
 }
 
@@ -148,6 +182,12 @@ func (UnimplementedPolicyAdminServer) ListPolicies(context.Context, *ListPolicie
 }
 func (UnimplementedPolicyAdminServer) ReloadPolicy(context.Context, *ReloadPolicyRequest) (*ReloadPolicyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReloadPolicy not implemented")
+}
+func (UnimplementedPolicyAdminServer) RevokeToken(context.Context, *RevokeTokenRequest) (*RevokeTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeToken not implemented")
+}
+func (UnimplementedPolicyAdminServer) ListRevokedTokens(context.Context, *ListRevokedTokensRequest) (*ListRevokedTokensResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRevokedTokens not implemented")
 }
 func (UnimplementedPolicyAdminServer) mustEmbedUnimplementedPolicyAdminServer() {}
 func (UnimplementedPolicyAdminServer) testEmbeddedByValue()                     {}
@@ -242,6 +282,42 @@ func _PolicyAdmin_ReloadPolicy_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PolicyAdmin_RevokeToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PolicyAdminServer).RevokeToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PolicyAdmin_RevokeToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PolicyAdminServer).RevokeToken(ctx, req.(*RevokeTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PolicyAdmin_ListRevokedTokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRevokedTokensRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PolicyAdminServer).ListRevokedTokens(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PolicyAdmin_ListRevokedTokens_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PolicyAdminServer).ListRevokedTokens(ctx, req.(*ListRevokedTokensRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PolicyAdmin_ServiceDesc is the grpc.ServiceDesc for PolicyAdmin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -264,6 +340,14 @@ var PolicyAdmin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReloadPolicy",
 			Handler:    _PolicyAdmin_ReloadPolicy_Handler,
+		},
+		{
+			MethodName: "RevokeToken",
+			Handler:    _PolicyAdmin_RevokeToken_Handler,
+		},
+		{
+			MethodName: "ListRevokedTokens",
+			Handler:    _PolicyAdmin_ListRevokedTokens_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

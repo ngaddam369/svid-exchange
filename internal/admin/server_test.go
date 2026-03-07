@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,6 +32,11 @@ var yamlRule = policy.Policy{
 
 func newTestServer(t *testing.T) (*Server, *policy.Store) {
 	t.Helper()
+	return newTestServerWithRevoke(t, func(_ string) {})
+}
+
+func newTestServerWithRevoke(t *testing.T, revoke func(string)) (*Server, *policy.Store) {
+	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "policy.db")
 	store, err := policy.OpenStore(dbPath)
 	if err != nil {
@@ -39,13 +45,12 @@ func newTestServer(t *testing.T) (*Server, *policy.Store) {
 	t.Cleanup(func() { store.Close() })
 
 	yamlPolicies := []policy.Policy{yamlRule}
-	swapped := &policy.Loader{}
-	_ = swapped
 	svc := New(
 		store,
 		func() []policy.Policy { return yamlPolicies },
 		func(_ *policy.Loader) {},
 		func() error { return nil },
+		revoke,
 	)
 	return svc, store
 }
@@ -201,6 +206,7 @@ func TestReloadPolicy(t *testing.T) {
 			func() []policy.Policy { return nil },
 			func(_ *policy.Loader) {},
 			func() error { return nil },
+			func(_ string) {},
 		)
 		if _, err := svc.ReloadPolicy(context.Background(), &adminv1.ReloadPolicyRequest{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -219,9 +225,111 @@ func TestReloadPolicy(t *testing.T) {
 			func() []policy.Policy { return nil },
 			func(_ *policy.Loader) {},
 			func() error { return errors.New("bad yaml") },
+			func(_ string) {},
 		)
 		_, err = svc.ReloadPolicy(context.Background(), &adminv1.ReloadPolicyRequest{})
 		assertCode(t, err, codes.Internal)
+	})
+}
+
+func TestRevokeToken(t *testing.T) {
+	t.Run("empty token_id returns InvalidArgument", func(t *testing.T) {
+		svc, _ := newTestServer(t)
+		_, err := svc.RevokeToken(context.Background(), &adminv1.RevokeTokenRequest{ExpiresAt: time.Now().Add(time.Minute).Unix()})
+		assertCode(t, err, codes.InvalidArgument)
+	})
+
+	t.Run("zero expires_at returns InvalidArgument", func(t *testing.T) {
+		svc, _ := newTestServer(t)
+		_, err := svc.RevokeToken(context.Background(), &adminv1.RevokeTokenRequest{TokenId: "some-jti"})
+		assertCode(t, err, codes.InvalidArgument)
+	})
+
+	t.Run("valid request persists and calls revoke callback", func(t *testing.T) {
+		var revoked []string
+		svc, store := newTestServerWithRevoke(t, func(jti string) { revoked = append(revoked, jti) })
+
+		exp := time.Now().Add(time.Minute).Unix()
+		_, err := svc.RevokeToken(context.Background(), &adminv1.RevokeTokenRequest{
+			TokenId:   "test-jti",
+			ExpiresAt: exp,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Callback was called.
+		if len(revoked) != 1 || revoked[0] != "test-jti" {
+			t.Errorf("revoke callback: got %v, want [test-jti]", revoked)
+		}
+
+		// Entry persisted in store.
+		entries, err := store.ListRevocations()
+		if err != nil {
+			t.Fatalf("list revocations: %v", err)
+		}
+		if len(entries) != 1 || entries[0].JTI != "test-jti" || entries[0].ExpiresAt != exp {
+			t.Errorf("store entries: got %+v", entries)
+		}
+	})
+}
+
+func TestListRevokedTokens(t *testing.T) {
+	t.Run("empty store returns empty list", func(t *testing.T) {
+		svc, _ := newTestServer(t)
+		resp, err := svc.ListRevokedTokens(context.Background(), &adminv1.ListRevokedTokensRequest{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Tokens) != 0 {
+			t.Errorf("expected 0 tokens, got %d", len(resp.Tokens))
+		}
+	})
+
+	t.Run("expired entry is filtered out", func(t *testing.T) {
+		svc, store := newTestServer(t)
+		if err := store.SaveRevocation("expired-jti", time.Now().Add(-time.Minute).Unix()); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		resp, err := svc.ListRevokedTokens(context.Background(), &adminv1.ListRevokedTokensRequest{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Tokens) != 0 {
+			t.Errorf("expected expired entry to be filtered, got %+v", resp.Tokens)
+		}
+	})
+
+	t.Run("active entry is returned", func(t *testing.T) {
+		svc, store := newTestServer(t)
+		exp := time.Now().Add(time.Minute).Unix()
+		if err := store.SaveRevocation("active-jti", exp); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		resp, err := svc.ListRevokedTokens(context.Background(), &adminv1.ListRevokedTokensRequest{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Tokens) != 1 || resp.Tokens[0].TokenId != "active-jti" || resp.Tokens[0].ExpiresAt != exp {
+			t.Errorf("expected active-jti, got %+v", resp.Tokens)
+		}
+	})
+
+	t.Run("mixed entries returns only active", func(t *testing.T) {
+		svc, store := newTestServer(t)
+		if err := store.SaveRevocation("expired-jti", time.Now().Add(-time.Minute).Unix()); err != nil {
+			t.Fatalf("seed expired: %v", err)
+		}
+		if err := store.SaveRevocation("active-jti", time.Now().Add(time.Minute).Unix()); err != nil {
+			t.Fatalf("seed active: %v", err)
+		}
+		resp, err := svc.ListRevokedTokens(context.Background(), &adminv1.ListRevokedTokensRequest{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Tokens) != 1 || resp.Tokens[0].TokenId != "active-jti" {
+			t.Errorf("expected only active-jti, got %+v", resp.Tokens)
+		}
 	})
 }
 

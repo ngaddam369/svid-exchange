@@ -477,6 +477,230 @@ func (*ReloadPolicyResponse) Descriptor() ([]byte, []int) {
 	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{9}
 }
 
+type RevokeTokenRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// token_id is the jti claim of the token to revoke (from ExchangeResponse.token_id).
+	TokenId string `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	// expires_at is the Unix timestamp when the token expires naturally
+	// (from ExchangeResponse.expires_at). Used to purge stale entries automatically.
+	ExpiresAt     int64 `protobuf:"varint,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeTokenRequest) Reset() {
+	*x = RevokeTokenRequest{}
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeTokenRequest) ProtoMessage() {}
+
+func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeTokenRequest.ProtoReflect.Descriptor instead.
+func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
+	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RevokeTokenRequest) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *RevokeTokenRequest) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+type RevokeTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeTokenResponse) Reset() {
+	*x = RevokeTokenResponse{}
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeTokenResponse) ProtoMessage() {}
+
+func (x *RevokeTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeTokenResponse.ProtoReflect.Descriptor instead.
+func (*RevokeTokenResponse) Descriptor() ([]byte, []int) {
+	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{11}
+}
+
+type ListRevokedTokensRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRevokedTokensRequest) Reset() {
+	*x = ListRevokedTokensRequest{}
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRevokedTokensRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRevokedTokensRequest) ProtoMessage() {}
+
+func (x *ListRevokedTokensRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRevokedTokensRequest.ProtoReflect.Descriptor instead.
+func (*ListRevokedTokensRequest) Descriptor() ([]byte, []int) {
+	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{12}
+}
+
+// RevokedToken holds the token ID and its natural expiry.
+type RevokedToken struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenId       string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokedToken) Reset() {
+	*x = RevokedToken{}
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokedToken) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokedToken) ProtoMessage() {}
+
+func (x *RevokedToken) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokedToken.ProtoReflect.Descriptor instead.
+func (*RevokedToken) Descriptor() ([]byte, []int) {
+	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RevokedToken) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *RevokedToken) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+type ListRevokedTokensResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tokens        []*RevokedToken        `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRevokedTokensResponse) Reset() {
+	*x = ListRevokedTokensResponse{}
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRevokedTokensResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRevokedTokensResponse) ProtoMessage() {}
+
+func (x *ListRevokedTokensResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_admin_v1_admin_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRevokedTokensResponse.ProtoReflect.Descriptor instead.
+func (*ListRevokedTokensResponse) Descriptor() ([]byte, []int) {
+	return file_proto_admin_v1_admin_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListRevokedTokensResponse) GetTokens() []*RevokedToken {
+	if x != nil {
+		return x.Tokens
+	}
+	return nil
+}
+
 var File_proto_admin_v1_admin_proto protoreflect.FileDescriptor
 
 const file_proto_admin_v1_admin_proto_rawDesc = "" +
@@ -503,12 +727,26 @@ const file_proto_admin_v1_admin_proto_rawDesc = "" +
 	"\x14ListPoliciesResponse\x121\n" +
 	"\bpolicies\x18\x01 \x03(\v2\x15.admin.v1.PolicyEntryR\bpolicies\"\x15\n" +
 	"\x13ReloadPolicyRequest\"\x16\n" +
-	"\x14ReloadPolicyResponse2\xc9\x02\n" +
+	"\x14ReloadPolicyResponse\"N\n" +
+	"\x12RevokeTokenRequest\x12\x19\n" +
+	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\x03R\texpiresAt\"\x15\n" +
+	"\x13RevokeTokenResponse\"\x1a\n" +
+	"\x18ListRevokedTokensRequest\"H\n" +
+	"\fRevokedToken\x12\x19\n" +
+	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\x03R\texpiresAt\"K\n" +
+	"\x19ListRevokedTokensResponse\x12.\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x16.admin.v1.RevokedTokenR\x06tokens2\xf3\x03\n" +
 	"\vPolicyAdmin\x12M\n" +
 	"\fCreatePolicy\x12\x1d.admin.v1.CreatePolicyRequest\x1a\x1e.admin.v1.CreatePolicyResponse\x12M\n" +
 	"\fDeletePolicy\x12\x1d.admin.v1.DeletePolicyRequest\x1a\x1e.admin.v1.DeletePolicyResponse\x12M\n" +
 	"\fListPolicies\x12\x1d.admin.v1.ListPoliciesRequest\x1a\x1e.admin.v1.ListPoliciesResponse\x12M\n" +
-	"\fReloadPolicy\x12\x1d.admin.v1.ReloadPolicyRequest\x1a\x1e.admin.v1.ReloadPolicyResponseB<Z:github.com/ngaddam369/svid-exchange/proto/admin/v1;adminv1b\x06proto3"
+	"\fReloadPolicy\x12\x1d.admin.v1.ReloadPolicyRequest\x1a\x1e.admin.v1.ReloadPolicyResponse\x12J\n" +
+	"\vRevokeToken\x12\x1c.admin.v1.RevokeTokenRequest\x1a\x1d.admin.v1.RevokeTokenResponse\x12\\\n" +
+	"\x11ListRevokedTokens\x12\".admin.v1.ListRevokedTokensRequest\x1a#.admin.v1.ListRevokedTokensResponseB<Z:github.com/ngaddam369/svid-exchange/proto/admin/v1;adminv1b\x06proto3"
 
 var (
 	file_proto_admin_v1_admin_proto_rawDescOnce sync.Once
@@ -522,37 +760,47 @@ func file_proto_admin_v1_admin_proto_rawDescGZIP() []byte {
 	return file_proto_admin_v1_admin_proto_rawDescData
 }
 
-var file_proto_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_proto_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_proto_admin_v1_admin_proto_goTypes = []any{
-	(*PolicyRule)(nil),           // 0: admin.v1.PolicyRule
-	(*CreatePolicyRequest)(nil),  // 1: admin.v1.CreatePolicyRequest
-	(*CreatePolicyResponse)(nil), // 2: admin.v1.CreatePolicyResponse
-	(*DeletePolicyRequest)(nil),  // 3: admin.v1.DeletePolicyRequest
-	(*DeletePolicyResponse)(nil), // 4: admin.v1.DeletePolicyResponse
-	(*ListPoliciesRequest)(nil),  // 5: admin.v1.ListPoliciesRequest
-	(*PolicyEntry)(nil),          // 6: admin.v1.PolicyEntry
-	(*ListPoliciesResponse)(nil), // 7: admin.v1.ListPoliciesResponse
-	(*ReloadPolicyRequest)(nil),  // 8: admin.v1.ReloadPolicyRequest
-	(*ReloadPolicyResponse)(nil), // 9: admin.v1.ReloadPolicyResponse
+	(*PolicyRule)(nil),                // 0: admin.v1.PolicyRule
+	(*CreatePolicyRequest)(nil),       // 1: admin.v1.CreatePolicyRequest
+	(*CreatePolicyResponse)(nil),      // 2: admin.v1.CreatePolicyResponse
+	(*DeletePolicyRequest)(nil),       // 3: admin.v1.DeletePolicyRequest
+	(*DeletePolicyResponse)(nil),      // 4: admin.v1.DeletePolicyResponse
+	(*ListPoliciesRequest)(nil),       // 5: admin.v1.ListPoliciesRequest
+	(*PolicyEntry)(nil),               // 6: admin.v1.PolicyEntry
+	(*ListPoliciesResponse)(nil),      // 7: admin.v1.ListPoliciesResponse
+	(*ReloadPolicyRequest)(nil),       // 8: admin.v1.ReloadPolicyRequest
+	(*ReloadPolicyResponse)(nil),      // 9: admin.v1.ReloadPolicyResponse
+	(*RevokeTokenRequest)(nil),        // 10: admin.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),       // 11: admin.v1.RevokeTokenResponse
+	(*ListRevokedTokensRequest)(nil),  // 12: admin.v1.ListRevokedTokensRequest
+	(*RevokedToken)(nil),              // 13: admin.v1.RevokedToken
+	(*ListRevokedTokensResponse)(nil), // 14: admin.v1.ListRevokedTokensResponse
 }
 var file_proto_admin_v1_admin_proto_depIdxs = []int32{
-	0, // 0: admin.v1.CreatePolicyRequest.rule:type_name -> admin.v1.PolicyRule
-	0, // 1: admin.v1.CreatePolicyResponse.rule:type_name -> admin.v1.PolicyRule
-	0, // 2: admin.v1.PolicyEntry.rule:type_name -> admin.v1.PolicyRule
-	6, // 3: admin.v1.ListPoliciesResponse.policies:type_name -> admin.v1.PolicyEntry
-	1, // 4: admin.v1.PolicyAdmin.CreatePolicy:input_type -> admin.v1.CreatePolicyRequest
-	3, // 5: admin.v1.PolicyAdmin.DeletePolicy:input_type -> admin.v1.DeletePolicyRequest
-	5, // 6: admin.v1.PolicyAdmin.ListPolicies:input_type -> admin.v1.ListPoliciesRequest
-	8, // 7: admin.v1.PolicyAdmin.ReloadPolicy:input_type -> admin.v1.ReloadPolicyRequest
-	2, // 8: admin.v1.PolicyAdmin.CreatePolicy:output_type -> admin.v1.CreatePolicyResponse
-	4, // 9: admin.v1.PolicyAdmin.DeletePolicy:output_type -> admin.v1.DeletePolicyResponse
-	7, // 10: admin.v1.PolicyAdmin.ListPolicies:output_type -> admin.v1.ListPoliciesResponse
-	9, // 11: admin.v1.PolicyAdmin.ReloadPolicy:output_type -> admin.v1.ReloadPolicyResponse
-	8, // [8:12] is the sub-list for method output_type
-	4, // [4:8] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0,  // 0: admin.v1.CreatePolicyRequest.rule:type_name -> admin.v1.PolicyRule
+	0,  // 1: admin.v1.CreatePolicyResponse.rule:type_name -> admin.v1.PolicyRule
+	0,  // 2: admin.v1.PolicyEntry.rule:type_name -> admin.v1.PolicyRule
+	6,  // 3: admin.v1.ListPoliciesResponse.policies:type_name -> admin.v1.PolicyEntry
+	13, // 4: admin.v1.ListRevokedTokensResponse.tokens:type_name -> admin.v1.RevokedToken
+	1,  // 5: admin.v1.PolicyAdmin.CreatePolicy:input_type -> admin.v1.CreatePolicyRequest
+	3,  // 6: admin.v1.PolicyAdmin.DeletePolicy:input_type -> admin.v1.DeletePolicyRequest
+	5,  // 7: admin.v1.PolicyAdmin.ListPolicies:input_type -> admin.v1.ListPoliciesRequest
+	8,  // 8: admin.v1.PolicyAdmin.ReloadPolicy:input_type -> admin.v1.ReloadPolicyRequest
+	10, // 9: admin.v1.PolicyAdmin.RevokeToken:input_type -> admin.v1.RevokeTokenRequest
+	12, // 10: admin.v1.PolicyAdmin.ListRevokedTokens:input_type -> admin.v1.ListRevokedTokensRequest
+	2,  // 11: admin.v1.PolicyAdmin.CreatePolicy:output_type -> admin.v1.CreatePolicyResponse
+	4,  // 12: admin.v1.PolicyAdmin.DeletePolicy:output_type -> admin.v1.DeletePolicyResponse
+	7,  // 13: admin.v1.PolicyAdmin.ListPolicies:output_type -> admin.v1.ListPoliciesResponse
+	9,  // 14: admin.v1.PolicyAdmin.ReloadPolicy:output_type -> admin.v1.ReloadPolicyResponse
+	11, // 15: admin.v1.PolicyAdmin.RevokeToken:output_type -> admin.v1.RevokeTokenResponse
+	14, // 16: admin.v1.PolicyAdmin.ListRevokedTokens:output_type -> admin.v1.ListRevokedTokensResponse
+	11, // [11:17] is the sub-list for method output_type
+	5,  // [5:11] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proto_admin_v1_admin_proto_init() }
@@ -566,7 +814,7 @@ func file_proto_admin_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_admin_v1_admin_proto_rawDesc), len(file_proto_admin_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

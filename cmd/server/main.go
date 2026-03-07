@@ -168,12 +168,32 @@ func main() {
 		return ap.rebuild(store)
 	}
 
+	// Restore persisted revocations into the in-memory list.
+	revocations, err := store.ListRevocations()
+	if err != nil {
+		log.Fatal().Err(err).Msg("load revocations")
+	}
+	loaded := 0
+	for _, r := range revocations {
+		if r.ExpiresAt > time.Now().Unix() {
+			svc.Revoke(r.JTI)
+			loaded++
+		} else {
+			if err := store.DeleteRevocation(r.JTI); err != nil {
+				log.Warn().Err(err).Str("jti", r.JTI).Msg("cleanup expired revocation")
+			}
+		}
+	}
+	if loaded > 0 {
+		log.Info().Int("count", loaded).Msg("revocations restored")
+	}
+
 	// --- Admin gRPC server ---
 	// Separate listener on admin_addr so it can be network-restricted
 	// independently of the data-plane gRPC port.
 	// Uses the same mTLS credentials as the data-plane server.
 	adminServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)))
-	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap, reloadPolicy)
+	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap, reloadPolicy, svc.Revoke)
 	adminv1.RegisterPolicyAdminServer(adminServer, adminSvc)
 	if cfg.GRPCReflection {
 		reflection.Register(adminServer)

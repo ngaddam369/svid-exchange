@@ -11,6 +11,8 @@ import (
 
 var bucketName = []byte("policies")
 
+var revocationsBucket = []byte("revocations")
+
 // Store is a BoltDB-backed persistent store for dynamic policies.
 // Dynamic policies supplement the YAML file and survive server restarts.
 type Store struct {
@@ -25,7 +27,10 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open policy store: %w", err)
 	}
 	if err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(bucketName)
+		if _, err := tx.CreateBucketIfNotExists(bucketName); err != nil {
+			return err
+		}
+		_, err := tx.CreateBucketIfNotExists(revocationsBucket)
 		return err
 	}); err != nil {
 		return nil, errors.Join(fmt.Errorf("init policy bucket: %w", err), db.Close())
@@ -67,6 +72,47 @@ func (s *Store) List() ([]Policy, error) {
 				return fmt.Errorf("unmarshal policy: %w", err)
 			}
 			out = append(out, p)
+			return nil
+		})
+	})
+	return out, err
+}
+
+// RevokedEntry holds a persisted revocation record.
+type RevokedEntry struct {
+	JTI       string
+	ExpiresAt int64 // Unix timestamp
+}
+
+// SaveRevocation persists a revoked JTI with its natural expiry timestamp.
+func (s *Store) SaveRevocation(jti string, expiresAt int64) error {
+	data, err := json.Marshal(expiresAt)
+	if err != nil {
+		return fmt.Errorf("marshal revocation: %w", err)
+	}
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(revocationsBucket).Put([]byte(jti), data)
+	})
+}
+
+// DeleteRevocation removes a revocation entry from the persistent store.
+// It is not an error to delete a JTI that does not exist.
+func (s *Store) DeleteRevocation(jti string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(revocationsBucket).Delete([]byte(jti))
+	})
+}
+
+// ListRevocations returns all persisted revocation entries.
+func (s *Store) ListRevocations() ([]RevokedEntry, error) {
+	var out []RevokedEntry
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket(revocationsBucket).ForEach(func(k, v []byte) error {
+			var expiresAt int64
+			if err := json.Unmarshal(v, &expiresAt); err != nil {
+				return fmt.Errorf("unmarshal revocation: %w", err)
+			}
+			out = append(out, RevokedEntry{JTI: string(k), ExpiresAt: expiresAt})
 			return nil
 		})
 	})

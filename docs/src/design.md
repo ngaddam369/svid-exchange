@@ -82,5 +82,4 @@ The key design decisions and their rationale:
 |------------|--------|
 | Signing key is ephemeral by default | `key_rotation_interval` bounds the exposure window per key; hardware-protected keys are supported via the `token.Signer` interface and a KMS adapter (see Security → KMS integration) |
 | Rate limits are per-SPIFFE-ID, not per-target | Per-target limits require policy-file integration and are not yet implemented |
-| In-memory revocation list is not persisted | Revoked JTIs are lost on restart; a persistent store and a runtime admin endpoint for managing revocations are planned |
 | Multi-replica rate limiting requires external state | Redis or sidecar integration is a future consideration |

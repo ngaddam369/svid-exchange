@@ -5,6 +5,7 @@ package admin
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,19 +21,22 @@ type Server struct {
 	yamlPolicies func() []policy.Policy
 	swap         func(*policy.Loader)
 	reload       func() error
+	revoke       func(jti string)
 }
 
 // New returns a Server. yamlPolicies must return the current YAML-sourced
 // policies (used for conflict detection). swap is called with the rebuilt
 // Loader after every store mutation. reload is called by ReloadPolicy to
-// re-read the YAML file and merge it with dynamic policies.
+// re-read the YAML file and merge it with dynamic policies. revoke is called
+// to add a JTI to the in-memory revocation list on the exchange server.
 func New(
 	store *policy.Store,
 	yamlPolicies func() []policy.Policy,
 	swap func(*policy.Loader),
 	reload func() error,
+	revoke func(jti string),
 ) *Server {
-	return &Server{store: store, yamlPolicies: yamlPolicies, swap: swap, reload: reload}
+	return &Server{store: store, yamlPolicies: yamlPolicies, swap: swap, reload: reload, revoke: revoke}
 }
 
 // CreatePolicy adds a new dynamic policy. It fails with ALREADY_EXISTS if the
@@ -164,6 +168,44 @@ func (s *Server) ListPolicies(_ context.Context, _ *adminv1.ListPoliciesRequest)
 	}
 
 	return &adminv1.ListPoliciesResponse{Policies: entries}, nil
+}
+
+// RevokeToken permanently denies a token ID. The revocation is persisted in
+// BoltDB and the in-memory revocation list on the exchange server is updated
+// immediately so in-flight calls are rejected without waiting for a restart.
+func (s *Server) RevokeToken(_ context.Context, req *adminv1.RevokeTokenRequest) (*adminv1.RevokeTokenResponse, error) {
+	if req.TokenId == "" {
+		return nil, status.Error(codes.InvalidArgument, "token_id is required")
+	}
+	if req.ExpiresAt <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "expires_at is required")
+	}
+	if err := s.store.SaveRevocation(req.TokenId, req.ExpiresAt); err != nil {
+		return nil, status.Errorf(codes.Internal, "save revocation: %v", err)
+	}
+	s.revoke(req.TokenId)
+	return &adminv1.RevokeTokenResponse{}, nil
+}
+
+// ListRevokedTokens returns all tokens that have been explicitly revoked and
+// have not yet expired naturally. Expired entries are excluded from the
+// response but are not deleted from the store; they are cleaned up on startup.
+func (s *Server) ListRevokedTokens(_ context.Context, _ *adminv1.ListRevokedTokensRequest) (*adminv1.ListRevokedTokensResponse, error) {
+	entries, err := s.store.ListRevocations()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list revocations: %v", err)
+	}
+	now := time.Now().Unix()
+	var tokens []*adminv1.RevokedToken
+	for _, e := range entries {
+		if e.ExpiresAt > now {
+			tokens = append(tokens, &adminv1.RevokedToken{
+				TokenId:   e.JTI,
+				ExpiresAt: e.ExpiresAt,
+			})
+		}
+	}
+	return &adminv1.ListRevokedTokensResponse{Tokens: tokens}, nil
 }
 
 func protoToPolicy(r *adminv1.PolicyRule) policy.Policy {
