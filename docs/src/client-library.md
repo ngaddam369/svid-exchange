@@ -46,6 +46,16 @@ If you need to manage policies programmatically, use the admin gRPC stubs direct
 
 ---
 
+## Cloud IAM Federation
+
+Once a workload holds a JWT from svid-exchange it can go further and exchange it for native cloud credentials — all without storing any long-lived secrets.
+
+`AssumeRoleWithJWT(ctx, jwt, roleARN, sessionName)` calls AWS STS `AssumeRoleWithWebIdentity` and returns an `AWSCredentials` struct containing the temporary `AccessKeyID`, `SecretAccessKey`, `SessionToken`, and `Expiration`. The JWT is the only credential required; no long-term AWS access keys are needed. The role must be configured to trust the svid-exchange issuer as a web identity provider.
+
+`ExchangeForGCPToken(ctx, jwt, audience, serviceAccount, scopes)` uses GCP Workload Identity Federation to exchange the JWT for a GCP access token. `audience` is the workload identity pool provider resource name. If `serviceAccount` is non-empty, the federated token is used to impersonate that service account and its access token is returned; otherwise the federated token itself is returned. Scopes are the standard OAuth2 scopes the token should carry (e.g. `https://www.googleapis.com/auth/cloud-platform`).
+
+---
+
 ## Testing
 
 The production constructor (`New`) requires a live SPIRE Agent and a reachable svid-exchange server. Tests bypass both by wiring a mock directly to the unexported `exchanger` interface inside `package client`. The mock returns synthetic `ExchangeResponse` values and counts how many times `Exchange` was called, letting tests observe caching and refresh behaviour through the public `Token` API without touching any internal state.
