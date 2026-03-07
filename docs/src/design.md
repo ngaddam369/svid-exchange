@@ -80,10 +80,7 @@ The key design decisions and their rationale:
 
 | Limitation | Status |
 |------------|--------|
-| Signing key is ephemeral (generated at startup, lost on restart) | `key_rotation_interval` bounds the exposure window per key; KMS integration (AWS/GCP) for a persistent, hardware-protected key is planned |
+| Signing key is ephemeral by default | `key_rotation_interval` bounds the exposure window per key; hardware-protected keys are supported via the `token.Signer` interface and a KMS adapter (see Security → KMS integration) |
 | Rate limits are per-SPIFFE-ID, not per-target | Per-target limits require policy-file integration and are not yet implemented |
 | In-memory revocation list is not persisted | Revoked JTIs are lost on restart; a persistent store and a runtime admin endpoint for managing revocations are planned |
 | Multi-replica rate limiting requires external state | Redis or sidecar integration is a future consideration |
-| Client library covers gRPC only (HTTP transport pending) | `pkg/client` provides `Client` (token fetch, TTL-aware cache, gRPC credential injection) and `Verifier` (JWKS-backed JWT validation); HTTP `RoundTripper` and HTTP server middleware are planned extensions |
-| No token delegation | The `on_behalf_of` pattern (service acting with a user's reduced permissions) requires a proto change and is planned as a future extension |
-| No cloud IAM federation | Presenting a SPIFFE SVID directly to AWS STS or GCP Workload Identity to obtain short-lived cloud credentials is a planned extension of the client library |

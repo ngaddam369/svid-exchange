@@ -204,9 +204,18 @@ Expected output:
 
 ```
 === RUN   TestE2EFlow
-exchange OK: token_id=<uuid> granted_scopes=[e2e:ping]
-validation OK: audience=spiffe://cluster.local/ns/default/sa/e2e-validator scope=e2e:ping
-E2E OK
+  token_id=<uuid> granted_scopes=[e2e:ping]
+PASS [happy path]
+  act.sub=e2e-user
+PASS [delegation: on_behalf_of sets act.sub]
+  correctly denied: PermissionDenied
+PASS [policy denial: disallowed scope]
+  granted_scopes=[e2e:ping] (e2e:extra correctly filtered)
+PASS [scope filter: superset request returns allowed subset]
+PASS [health endpoint]
+  http://svid-exchange:8081/metrics: found "grpc_server_started_total"
+PASS [metrics endpoint]
+E2E OK — all scenarios passed
 --- PASS: TestE2EFlow (N.NNs)
 PASS
 ```

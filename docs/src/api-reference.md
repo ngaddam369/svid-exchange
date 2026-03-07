@@ -23,6 +23,7 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 | `target_service` | string | SPIFFE ID of the target service |
 | `scopes` | repeated string | Permission scopes being requested |
 | `ttl_seconds` | int32 | Requested token lifetime in seconds; capped to the policy `max_ttl` |
+| `on_behalf_of` | string | Optional JWT identifying the principal this service is acting for; when set, the resulting token carries an `act.sub` claim (RFC 8693) containing the subject extracted from this JWT |
 
 #### ExchangeResponse
 
@@ -236,7 +237,7 @@ curl http://localhost:8081/metrics | grep "^grpc_server"
 
 Returns the public signing key as a JSON Web Key Set (JWKS). Downstream services use this to verify the signature on JWTs issued by svid-exchange without any out-of-band key distribution.
 
-The response body is computed once at startup from the minter's public key and reused for every request. The `kid` field is the RFC 7638 SHA-256 thumbprint of the key.
+The response body is computed on every request from the currently active signing keys, so key rotations are reflected immediately. During a rotation window the response contains two keys. The `kid` field is the RFC 7638 SHA-256 thumbprint of each key.
 
 ```bash
 curl http://localhost:8081/jwks
@@ -271,6 +272,7 @@ Tokens minted by svid-exchange carry the following claims:
 | `iat` | Issued-at timestamp |
 | `exp` | Expiration timestamp |
 | `jti` | Unique token ID (UUID) |
+| `act` | Object with `sub` field containing the original principal — present only when `on_behalf_of` was set in the request (RFC 8693) |
 
 ## JWT validation (target service)
 
