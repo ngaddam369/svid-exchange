@@ -37,3 +37,10 @@ policies:
       - orders:read
       - orders:create
     max_ttl: 120
+
+  - name: e2e-caller-to-e2e-validator
+    subject: "spiffe://cluster.local/ns/default/sa/e2e-caller"
+    target:  "spiffe://cluster.local/ns/default/sa/e2e-validator"
+    allowed_scopes:
+      - e2e:ping
+    max_ttl: 60

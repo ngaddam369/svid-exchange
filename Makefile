@@ -58,6 +58,11 @@ compose-down:
 clean:
 	rm -rf bin/
 
+## e2e: run the end-to-end test against the live Docker Compose stack
+## Prerequisite: make compose-up
+e2e:
+	go test -v -tags e2e -timeout 120s ./test/e2e/
+
 ## tidy: tidy and verify go modules
 tidy:
 	go mod tidy

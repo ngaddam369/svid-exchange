@@ -174,6 +174,45 @@ Several security features are disabled by default and enabled via environment va
 
 Prometheus metrics are always-on — no configuration needed. See [Prometheus Metrics](features/prometheus-metrics.md) for the full reference and limitations.
 
+## E2E test
+
+`test/e2e/` contains two stub microservices that exercise the full token exchange flow against the live Docker Compose stack:
+
+- **e2e-caller** — fetches its SVID from the SPIRE Workload API, calls `Exchange()` over mTLS to obtain a JWT targeting `e2e-validator`, then makes an HTTP request to the validator with `Authorization: Bearer <token>`. Exits 0 on success.
+- **e2e-validator** — listens for one HTTP request, verifies the JWT (signature via JWKS, audience, scope, and expiry), and exits after responding. Uses `pkg/client.Verifier` and `HasScope`.
+
+Docker orchestration is handled by `test/e2e/docker-compose.yml`, a Compose overlay that adds three short-lived services to the running dev stack:
+
+| Service | Purpose |
+|---------|---------|
+| `e2e-spire-init` | Registers the `e2e-caller` SPIFFE workload entry with SPIRE |
+| `e2e-validator` | JWT validation HTTP server (exits after one request) |
+| `e2e-caller` | Exchange caller; exit code determines test outcome |
+
+To run the E2E test:
+
+```bash
+# Terminal 1 — start the base stack (if not already running)
+make compose-up
+
+# Terminal 2 — run the E2E test
+make e2e
+# equivalent: go test -v -tags e2e -timeout 120s ./test/e2e/
+```
+
+Expected output:
+
+```
+=== RUN   TestE2EFlow
+exchange OK: token_id=<uuid> granted_scopes=[e2e:ping]
+validation OK: audience=spiffe://cluster.local/ns/default/sa/e2e-validator scope=e2e:ping
+E2E OK
+--- PASS: TestE2EFlow (N.NNs)
+PASS
+```
+
+The E2E test is excluded from `make verify` (no `-tags e2e` flag) and must be triggered explicitly.
+
 ## Make targets
 
 | Target | Description |
@@ -187,5 +226,6 @@ Prometheus metrics are always-on — no configuration needed. See [Prometheus Me
 | `make docs-build` | Build the mdBook documentation site (silently skipped if `mdbook` is not installed) |
 | `make compose-up` | Run `verify + validate-policy`, then start the full Docker Compose stack |
 | `make compose-down` | Stop all services and remove named volumes (clean slate) |
+| `make e2e` | Run the end-to-end test against the live Docker Compose stack (requires `make compose-up` first) |
 | `make clean` | Remove the `bin/` directory |
 | `make tidy` | Run `go mod tidy` and `go mod verify` |

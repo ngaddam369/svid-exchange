@@ -1,0 +1,91 @@
+# E2E overlay — docker compose -f docker-compose.yml -f test/e2e/docker-compose.yml
+#
+# Assumes the base stack (spire-server, spire-agent, svid-exchange) is already
+# running via `make compose-up`. The overlay adds three short-lived services:
+#
+#   e2e-spire-init  — registers the e2e-caller workload entry with SPIRE
+#   e2e-validator   — HTTP server that validates the JWT (exits after one request)
+#   e2e-caller      — fetches SVID, exchanges for JWT, calls validator, exits 0/1
+#
+# Usage (from project root):
+#   go test -v -tags e2e -timeout 120s ./test/e2e/
+# or
+#   make e2e
+
+name: svid-exchange-dev
+
+services:
+
+  # ── SPIRE workload entry registration (one-shot) ─────────────────────────────
+  # Registers spiffe://cluster.local/ns/default/sa/e2e-caller so the SPIRE agent
+  # will issue that SVID to the e2e-caller binary.
+  e2e-spire-init:
+    build:
+      context: dev/spire
+      dockerfile: Dockerfile.init
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        SOCKET="/opt/spire/sockets/server.sock"
+        TOKEN="$(cat /opt/spire/sockets/join-token)"
+        AGENT_ID="spiffe://cluster.local/spire/agent/join_token/${TOKEN}"
+        spire-server entry create \
+          -socketPath "$SOCKET" \
+          -parentID   "$AGENT_ID" \
+          -spiffeID   "spiffe://cluster.local/ns/default/sa/e2e-caller" \
+          -selector   "unix:uid:0" 2>&1 \
+          || echo "e2e-caller entry may already exist — continuing"
+    volumes:
+      - spire-sockets:/opt/spire/sockets
+    depends_on:
+      spire-agent:
+        condition: service_healthy
+    restart: "no"
+
+  # ── JWT validator (one-shot HTTP server) ─────────────────────────────────────
+  # Serves /healthz (always 200) and /ping (validates Bearer JWT then exits).
+  # The -healthcheck flag makes the binary probe /healthz and exit immediately,
+  # allowing Docker's CMD healthcheck to work with a scratch image.
+  e2e-validator:
+    build:
+      context: .
+      dockerfile: test/e2e/Dockerfile
+    command: ["/e2e-validator"]
+    environment:
+      JWKS_URL:       "http://svid-exchange:8081/jwks"
+      AUDIENCE:       "spiffe://cluster.local/ns/default/sa/e2e-validator"
+      REQUIRED_SCOPE: "e2e:ping"
+    healthcheck:
+      test: ["CMD", "/e2e-validator", "-healthcheck"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
+    depends_on:
+      svid-exchange:
+        condition: service_started
+    restart: "no"
+
+  # ── E2E caller (one-shot) ─────────────────────────────────────────────────────
+  # Fetches the e2e-caller SVID, exchanges it for a scoped JWT, calls the
+  # validator. Exits 0 on success; the test runner reads this exit code.
+  e2e-caller:
+    build:
+      context: .
+      dockerfile: test/e2e/Dockerfile
+    command: ["/e2e-caller"]
+    environment:
+      SPIFFE_ENDPOINT_SOCKET: "unix:///opt/spire/sockets/agent.sock"
+      EXCHANGE_ADDR:          "svid-exchange:8080"
+      VALIDATOR_URL:          "http://e2e-validator:8888/ping"
+      CALLER_SPIFFE_ID:       "spiffe://cluster.local/ns/default/sa/e2e-caller"
+      TARGET_SPIFFE_ID:       "spiffe://cluster.local/ns/default/sa/e2e-validator"
+    volumes:
+      - spire-sockets:/opt/spire/sockets
+    depends_on:
+      e2e-spire-init:
+        condition: service_completed_successfully
+      e2e-validator:
+        condition: service_healthy
+    restart: "no"

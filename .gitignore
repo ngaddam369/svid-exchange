@@ -26,6 +26,8 @@ bin/
 /server
 /svid-exchange
 /svid-exchange-validate
+/caller
+/validator
 
 # mdBook generated output
 docs/book/
