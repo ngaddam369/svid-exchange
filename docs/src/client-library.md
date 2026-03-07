@@ -26,6 +26,8 @@ No new dependencies are needed. The package uses the same `go-spiffe/v2`, `grpc`
 
 During a signing key rotation the server publishes two keys simultaneously — the current key and the one it just replaced. `Verify` tries all cached keys, so tokens signed by either remain valid throughout the rotation window. After a rotation completes, call `Refresh` to drop the old key and pick up only the new one without restarting the process.
 
+**HTTP server middleware.** `NewMiddleware` wraps any `http.Handler` and validates the JWT on every request before passing it through. It extracts the token from the `Authorization: Bearer` header, calls `Verify`, and on success stores the parsed claims in the request context. On any failure — missing header, wrong prefix, bad signature, wrong audience, expired — it responds 401 and the inner handler is never called. Use `ClaimsFromContext` to retrieve the claims inside the handler. Error details are intentionally not included in the 401 response to avoid leaking internal information.
+
 ---
 
 ## Scope of this library
