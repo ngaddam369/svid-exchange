@@ -28,6 +28,8 @@ During a signing key rotation the server publishes two keys simultaneously — t
 
 **HTTP server middleware.** `NewMiddleware` wraps any `http.Handler` and validates the JWT on every request before passing it through. It extracts the token from the `Authorization: Bearer` header, calls `Verify`, and on success stores the parsed claims in the request context. On any failure — missing header, wrong prefix, bad signature, wrong audience, expired — it responds 401 and the inner handler is never called. Use `ClaimsFromContext` to retrieve the claims inside the handler. Error details are intentionally not included in the 401 response to avoid leaking internal information.
 
+**Scope helpers.** `HasScope(claims, scope)` and `HasAllScopes(claims, scopes)` parse the space-delimited `scope` claim from `jwt.MapClaims` and report whether the token carries the required permission. Without them, every handler that gates on a scope has to split the claim string and iterate manually. `HasAllScopes` returns `true` when the scopes list is empty.
+
 ---
 
 ## Scope of this library
