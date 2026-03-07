@@ -57,7 +57,7 @@ func TestMiddleware(t *testing.T) {
 	}
 
 	validToken := func() string {
-		r, err := minter.Mint(subject, audience, []string{"read"}, 60)
+		r, err := minter.Mint(subject, audience, []string{"read"}, 60, "")
 		if err != nil {
 			t.Fatalf("Mint: %v", err)
 		}
@@ -98,7 +98,7 @@ func TestMiddleware(t *testing.T) {
 		{
 			name: "wrong audience rejected",
 			authHeader: func() string {
-				r, err := minter.Mint(subject, "spiffe://test.local/other", []string{"read"}, 60)
+				r, err := minter.Mint(subject, "spiffe://test.local/other", []string{"read"}, 60, "")
 				if err != nil {
 					t.Fatalf("Mint: %v", err)
 				}
@@ -126,7 +126,7 @@ func TestMiddleware(t *testing.T) {
 		{
 			name: "expired token rejected",
 			authHeader: func() string {
-				r, err := minter.Mint(subject, audience, []string{"read"}, 1)
+				r, err := minter.Mint(subject, audience, []string{"read"}, 1, "")
 				if err != nil {
 					t.Fatalf("Mint: %v", err)
 				}

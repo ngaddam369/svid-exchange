@@ -63,7 +63,7 @@ func TestVerifier(t *testing.T) {
 		{
 			name: "valid token verifies",
 			token: func() string {
-				r, err := minter.Mint("spiffe://test.local/order", audience, []string{"read"}, 60)
+				r, err := minter.Mint("spiffe://test.local/order", audience, []string{"read"}, 60, "")
 				if err != nil {
 					t.Fatalf("Mint: %v", err)
 				}
@@ -73,7 +73,7 @@ func TestVerifier(t *testing.T) {
 		{
 			name: "wrong audience rejected",
 			token: func() string {
-				r, err := minter.Mint("spiffe://test.local/order", "spiffe://test.local/other", []string{"read"}, 60)
+				r, err := minter.Mint("spiffe://test.local/order", "spiffe://test.local/other", []string{"read"}, 60, "")
 				if err != nil {
 					t.Fatalf("Mint: %v", err)
 				}
@@ -84,7 +84,7 @@ func TestVerifier(t *testing.T) {
 		{
 			name: "expired token rejected",
 			token: func() string {
-				r, err := minter.Mint("spiffe://test.local/order", audience, []string{"read"}, 1)
+				r, err := minter.Mint("spiffe://test.local/order", audience, []string{"read"}, 1, "")
 				if err != nil {
 					t.Fatalf("Mint: %v", err)
 				}
@@ -175,7 +175,7 @@ func TestStartAutoRefresh(t *testing.T) {
 				mu.Unlock()
 
 				// Token signed by rotated key fails before auto-refresh.
-				tok2, err := minter2.Mint("spiffe://test.local/order", audience, []string{"read"}, 60)
+				tok2, err := minter2.Mint("spiffe://test.local/order", audience, []string{"read"}, 60, "")
 				if err != nil {
 					t.Fatalf("Mint (rotated): %v", err)
 				}
@@ -236,7 +236,7 @@ func TestStartAutoRefresh(t *testing.T) {
 				time.Sleep(150 * time.Millisecond)
 
 				// Original key is still cached — tokens still verify.
-				tok, err := minter1.Mint("spiffe://test.local/order", audience, []string{"read"}, 60)
+				tok, err := minter1.Mint("spiffe://test.local/order", audience, []string{"read"}, 60, "")
 				if err != nil {
 					t.Fatalf("Mint: %v", err)
 				}

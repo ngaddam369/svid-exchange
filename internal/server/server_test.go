@@ -2,6 +2,8 @@ package server_test
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -36,11 +38,13 @@ func (m mockPolicy) Evaluate(_, _ string, _ []string, _ int32) policy.EvalResult
 }
 
 type mockMinter struct {
-	result token.MintResult
-	err    error
+	result  token.MintResult
+	err     error
+	lastAct string // actSubject passed to the most recent Mint call
 }
 
-func (m mockMinter) Mint(_, _ string, _ []string, _ int32) (token.MintResult, error) {
+func (m *mockMinter) Mint(_, _ string, _ []string, _ int32, actSubject string) (token.MintResult, error) {
+	m.lastAct = actSubject
 	return m.result, m.err
 }
 
@@ -54,8 +58,8 @@ func okExtractor() mockExtractor {
 	return mockExtractor{id: "spiffe://cluster.local/ns/default/sa/order"}
 }
 
-func okMinter() mockMinter {
-	return mockMinter{result: token.MintResult{
+func okMinter() *mockMinter {
+	return &mockMinter{result: token.MintResult{
 		Token:     "signed-jwt",
 		TokenID:   "test-jti",
 		ExpiresAt: time.Now().Add(5 * time.Minute),
@@ -72,6 +76,15 @@ func allowedPolicy(scopes []string, ttl int32) mockPolicy {
 
 func deniedPolicy() mockPolicy {
 	return mockPolicy{result: policy.EvalResult{Allowed: false}}
+}
+
+// makeTestJWT builds a minimal unsigned JWT string with the given sub claim.
+// extractSubFromJWT only decodes the payload without verifying the signature,
+// so the signature segment can be arbitrary.
+func makeTestJWT(sub string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES256","typ":"JWT"}`))
+	payload, _ := json.Marshal(map[string]string{"sub": sub})
+	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + ".fakesig"
 }
 
 // --- tests ---
@@ -137,7 +150,7 @@ func TestReplayAndRevocation(t *testing.T) {
 	t.Run("expired JTI is not treated as a replay", func(t *testing.T) {
 		// Mint with TTL=1; after expiry the cache entry is swept and a second
 		// exchange with the same JTI is allowed again.
-		shortMinter := mockMinter{result: token.MintResult{
+		shortMinter := &mockMinter{result: token.MintResult{
 			Token:     "signed-jwt",
 			TokenID:   "short-lived-jti",
 			ExpiresAt: time.Now().Add(1 * time.Second),
@@ -165,8 +178,9 @@ func TestExchange(t *testing.T) {
 		policy     server.PolicyEvaluator
 		minter     server.TokenMinter
 		req        *exchangev1.ExchangeRequest
-		wantCode   codes.Code // codes.OK (zero value) means success expected
-		wantScopes []string   // checked on success only
+		wantCode   codes.Code                               // codes.OK (zero value) means success expected
+		wantScopes []string                                 // checked on success only
+		check      func(t *testing.T, m server.TokenMinter) // optional post-exchange assertion
 	}{
 		{
 			name:      "valid request",
@@ -254,13 +268,46 @@ func TestExchange(t *testing.T) {
 			name:      "mint error",
 			extractor: okExtractor(),
 			policy:    allowedPolicy([]string{"payments:charge"}, 60),
-			minter:    mockMinter{err: errors.New("signing failed")},
+			minter:    &mockMinter{err: errors.New("signing failed")},
 			req: &exchangev1.ExchangeRequest{
 				TargetService: "spiffe://cluster.local/ns/default/sa/payment",
 				Scopes:        []string{"payments:charge"},
 				TtlSeconds:    60,
 			},
 			wantCode: codes.Internal,
+		},
+		{
+			name:      "delegation: act subject forwarded to minter",
+			extractor: okExtractor(),
+			policy:    allowedPolicy([]string{"payments:charge"}, 300),
+			minter:    okMinter(),
+			req: &exchangev1.ExchangeRequest{
+				TargetService: "spiffe://cluster.local/ns/default/sa/payment",
+				Scopes:        []string{"payments:charge"},
+				TtlSeconds:    300,
+				OnBehalfOf:    makeTestJWT("user-xyz"),
+			},
+			wantCode:   codes.OK,
+			wantScopes: []string{"payments:charge"},
+			check: func(t *testing.T, m server.TokenMinter) {
+				t.Helper()
+				if got := m.(*mockMinter).lastAct; got != "user-xyz" {
+					t.Errorf("actSubject passed to Mint = %q, want %q", got, "user-xyz")
+				}
+			},
+		},
+		{
+			name:      "delegation: malformed on_behalf_of rejected",
+			extractor: okExtractor(),
+			policy:    allowedPolicy([]string{"payments:charge"}, 300),
+			minter:    okMinter(),
+			req: &exchangev1.ExchangeRequest{
+				TargetService: "spiffe://cluster.local/ns/default/sa/payment",
+				Scopes:        []string{"payments:charge"},
+				TtlSeconds:    300,
+				OnBehalfOf:    "not.valid",
+			},
+			wantCode: codes.InvalidArgument,
 		},
 	}
 
@@ -296,6 +343,9 @@ func TestExchange(t *testing.T) {
 						t.Errorf("granted_scopes[%d] = %q, want %q", i, resp.GrantedScopes[i], s)
 					}
 				}
+			}
+			if tc.check != nil {
+				tc.check(t, tc.minter)
 			}
 		})
 	}

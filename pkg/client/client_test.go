@@ -16,15 +16,17 @@ import (
 // a unique token (call count appended) so tests can distinguish a cache hit
 // from a real exchange.
 type mockExchanger struct {
-	mu        sync.Mutex
-	calls     int
-	expiresAt int64 // unix timestamp; 0 → now+300s
-	err       error // when non-nil, Exchange returns this error
+	mu          sync.Mutex
+	calls       int
+	expiresAt   int64                       // unix timestamp; 0 → now+300s
+	err         error                       // when non-nil, Exchange returns this error
+	lastRequest *exchangev1.ExchangeRequest // last request received
 }
 
-func (m *mockExchanger) Exchange(_ context.Context, _ *exchangev1.ExchangeRequest, _ ...grpc.CallOption) (*exchangev1.ExchangeResponse, error) {
+func (m *mockExchanger) Exchange(_ context.Context, req *exchangev1.ExchangeRequest, _ ...grpc.CallOption) (*exchangev1.ExchangeResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.lastRequest = req
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -55,6 +57,11 @@ func newWithExchanger(exc exchanger, target string, scopes []string, ttlSeconds 
 			TTLSeconds:    ttlSeconds,
 		},
 	}
+}
+
+// newWithOpts creates a Client backed by exc with fully specified Options.
+func newWithOpts(exc exchanger, opts Options) *Client {
+	return &Client{exc: exc, opts: opts}
 }
 
 func TestToken(t *testing.T) {
@@ -150,6 +157,29 @@ func TestToken(t *testing.T) {
 				}
 				if mock.callCount() != callsBefore {
 					t.Error("Token() triggered a new Exchange after background refresh — cache was not warm")
+				}
+			},
+		},
+		{
+			name: "OnBehalfOf forwarded in ExchangeRequest",
+			run: func(t *testing.T) {
+				mock := &mockExchanger{}
+				c := newWithOpts(mock, Options{
+					TargetService: targetID,
+					Scopes:        []string{"read"},
+					OnBehalfOf:    "delegate.jwt.token",
+				})
+				if _, err := c.Token(context.Background()); err != nil {
+					t.Fatalf("Token: %v", err)
+				}
+				mock.mu.Lock()
+				req := mock.lastRequest
+				mock.mu.Unlock()
+				if req == nil {
+					t.Fatal("no request captured")
+				}
+				if req.OnBehalfOf != "delegate.jwt.token" {
+					t.Errorf("OnBehalfOf = %q, want %q", req.OnBehalfOf, "delegate.jwt.token")
 				}
 			},
 		},

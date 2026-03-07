@@ -41,6 +41,10 @@ type Options struct {
 	Scopes []string
 	// TTLSeconds is the requested token lifetime. 0 lets the policy decide.
 	TTLSeconds int32
+	// OnBehalfOf is an optional JWT identifying the principal this service is
+	// acting for. When set, the resulting token carries an act.sub claim
+	// (RFC 8693).
+	OnBehalfOf string
 }
 
 // Client fetches scoped JWTs from svid-exchange and caches them until close to
@@ -121,6 +125,7 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 		TargetService: c.opts.TargetService,
 		Scopes:        c.opts.Scopes,
 		TtlSeconds:    c.opts.TTLSeconds,
+		OnBehalfOf:    c.opts.OnBehalfOf,
 	})
 	if err != nil {
 		return "", fmt.Errorf("client: exchange: %w", err)

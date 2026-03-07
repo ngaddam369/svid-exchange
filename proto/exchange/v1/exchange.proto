@@ -22,6 +22,11 @@ message ExchangeRequest {
 
   // ttl_seconds is the requested TTL; capped by the policy max_ttl.
   int32 ttl_seconds = 3;
+
+  // on_behalf_of is an optional JWT identifying the principal this service is
+  // acting for. When set, the resulting token carries an act.sub claim
+  // (RFC 8693) containing the subject extracted from this JWT.
+  string on_behalf_of = 4;
 }
 
 message ExchangeResponse {

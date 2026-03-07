@@ -31,7 +31,11 @@ type ExchangeRequest struct {
 	// scopes are the permission scopes requested for this token.
 	Scopes []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	// ttl_seconds is the requested TTL; capped by the policy max_ttl.
-	TtlSeconds    int32 `protobuf:"varint,3,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	TtlSeconds int32 `protobuf:"varint,3,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	// on_behalf_of is an optional JWT identifying the principal this service is
+	// acting for. When set, the resulting token carries an act.sub claim
+	// (RFC 8693) containing the subject extracted from this JWT.
+	OnBehalfOf    string `protobuf:"bytes,4,opt,name=on_behalf_of,json=onBehalfOf,proto3" json:"on_behalf_of,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,6 +89,13 @@ func (x *ExchangeRequest) GetTtlSeconds() int32 {
 		return x.TtlSeconds
 	}
 	return 0
+}
+
+func (x *ExchangeRequest) GetOnBehalfOf() string {
+	if x != nil {
+		return x.OnBehalfOf
+	}
+	return ""
 }
 
 type ExchangeResponse struct {
@@ -163,12 +174,14 @@ var File_proto_exchange_v1_exchange_proto protoreflect.FileDescriptor
 
 const file_proto_exchange_v1_exchange_proto_rawDesc = "" +
 	"\n" +
-	" proto/exchange/v1/exchange.proto\x12\vexchange.v1\"q\n" +
+	" proto/exchange/v1/exchange.proto\x12\vexchange.v1\"\x93\x01\n" +
 	"\x0fExchangeRequest\x12%\n" +
 	"\x0etarget_service\x18\x01 \x01(\tR\rtargetService\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12\x1f\n" +
 	"\vttl_seconds\x18\x03 \x01(\x05R\n" +
-	"ttlSeconds\"\x89\x01\n" +
+	"ttlSeconds\x12 \n" +
+	"\fon_behalf_of\x18\x04 \x01(\tR\n" +
+	"onBehalfOf\"\x89\x01\n" +
 	"\x10ExchangeResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1d\n" +
 	"\n" +

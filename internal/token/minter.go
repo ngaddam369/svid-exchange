@@ -100,7 +100,7 @@ type MintResult struct {
 // The JWT is constructed manually so that any Signer backend — local key or
 // KMS — can provide the signature without access to the private key bytes.
 // ttlSeconds must be positive; the policy layer enforces the ceiling.
-func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32) (MintResult, error) {
+func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32, actSubject string) (MintResult, error) {
 	m.mu.RLock()
 	signer := m.current
 	m.mu.RUnlock()
@@ -109,7 +109,7 @@ func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32)
 	now := time.Now().UTC()
 	exp := now.Add(time.Duration(ttlSeconds) * time.Second)
 
-	payloadBytes, err := json.Marshal(map[string]any{
+	claims := map[string]any{
 		"iss":   issuer,
 		"sub":   subject,
 		"aud":   []string{target},
@@ -117,7 +117,11 @@ func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32)
 		"iat":   now.Unix(),
 		"exp":   exp.Unix(),
 		"jti":   jti,
-	})
+	}
+	if actSubject != "" {
+		claims["act"] = map[string]any{"sub": actSubject}
+	}
+	payloadBytes, err := json.Marshal(claims)
 	if err != nil {
 		return MintResult{}, fmt.Errorf("marshal claims: %w", err)
 	}

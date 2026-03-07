@@ -3,7 +3,10 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,7 +30,7 @@ type PolicyEvaluator interface {
 
 // TokenMinter mints a signed JWT for an authorised exchange.
 type TokenMinter interface {
-	Mint(subject, target string, scopes []string, ttlSeconds int32) (token.MintResult, error)
+	Mint(subject, target string, scopes []string, ttlSeconds int32, actSubject string) (token.MintResult, error)
 }
 
 // AuditLogger records exchange events for the audit trail.
@@ -58,6 +61,30 @@ func New(e IDExtractor, p PolicyEvaluator, m TokenMinter, a AuditLogger) *TokenE
 	}
 }
 
+// extractSubFromJWT decodes the payload segment of a JWT (without verifying
+// the signature) and returns the sub claim. Returns an error if the JWT is
+// malformed or has no sub claim.
+func extractSubFromJWT(raw string) (string, error) {
+	parts := strings.SplitN(raw, ".", 3)
+	if len(parts) != 3 {
+		return "", fmt.Errorf("malformed JWT: expected 3 segments")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("decode JWT payload: %w", err)
+	}
+	var claims struct {
+		Sub string `json:"sub"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("unmarshal JWT claims: %w", err)
+	}
+	if claims.Sub == "" {
+		return "", fmt.Errorf("JWT has no sub claim")
+	}
+	return claims.Sub, nil
+}
+
 // Revoke adds jti to the server's revocation list. Any subsequent exchange
 // that produces the same token ID is rejected with codes.PermissionDenied.
 func (s *TokenExchangeServer) Revoke(jti string) {
@@ -76,6 +103,14 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 	}
 	if len(req.Scopes) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "at least one scope is required")
+	}
+
+	var actSubject string
+	if req.OnBehalfOf != "" {
+		actSubject, err = extractSubFromJWT(req.OnBehalfOf)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "on_behalf_of: %v", err)
+		}
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -98,7 +133,7 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 		return nil, status.FromContextError(err).Err()
 	}
 
-	minted, err := s.minter.Mint(subjectID, req.TargetService, result.GrantedScopes, result.GrantedTTL)
+	minted, err := s.minter.Mint(subjectID, req.TargetService, result.GrantedScopes, result.GrantedTTL, actSubject)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "mint token: %v", err)
 	}

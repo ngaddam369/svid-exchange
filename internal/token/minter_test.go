@@ -62,7 +62,7 @@ func TestMint(t *testing.T) {
 		scopes := []string{"payments:charge", "payments:refund"}
 
 		before := time.Now().Unix()
-		result, err := m.Mint(subject, target, scopes, 300)
+		result, err := m.Mint(subject, target, scopes, 300, "")
 		after := time.Now().Unix()
 		if err != nil {
 			t.Fatalf("Mint: %v", err)
@@ -112,7 +112,7 @@ func TestMint(t *testing.T) {
 	})
 
 	t.Run("scope claim lists all granted scopes", func(t *testing.T) {
-		result, err := m.Mint("spiffe://a", "spiffe://b", []string{"payments:charge"}, 60)
+		result, err := m.Mint("spiffe://a", "spiffe://b", []string{"payments:charge"}, 60, "")
 		if err != nil {
 			t.Fatalf("Mint: %v", err)
 		}
@@ -126,7 +126,7 @@ func TestMint(t *testing.T) {
 	t.Run("JTI is unique across mints", func(t *testing.T) {
 		seen := make(map[string]bool)
 		for i := 0; i < 100; i++ {
-			r, err := m.Mint("spiffe://a", "spiffe://b", []string{"s:r"}, 60)
+			r, err := m.Mint("spiffe://a", "spiffe://b", []string{"s:r"}, 60, "")
 			if err != nil {
 				t.Fatalf("Mint: %v", err)
 			}
@@ -150,7 +150,7 @@ func TestNewMinterFromSigner(t *testing.T) {
 		t.Error("PublicKey should match the injected signer's key")
 	}
 	// Verify a token minted by the injected signer is valid.
-	result, err := m.Mint("spiffe://a", "spiffe://b", []string{"r:w"}, 60)
+	result, err := m.Mint("spiffe://a", "spiffe://b", []string{"r:w"}, 60, "")
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestRotateTo(t *testing.T) {
 	}
 
 	// Tokens minted before RotateTo must still verify with the old key.
-	result, err := NewMinterFromSigner(&ecdsaSigner{key: key2}).Mint("spiffe://a", "spiffe://b", []string{"r"}, 60)
+	result, err := NewMinterFromSigner(&ecdsaSigner{key: key2}).Mint("spiffe://a", "spiffe://b", []string{"r"}, 60, "")
 	if err != nil {
 		t.Fatalf("Mint after RotateTo: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestRotate(t *testing.T) {
 
 	// Tokens minted before rotation must still be verifiable with the old key.
 	m2 := newTestMinter(t)
-	result, err := m2.Mint("spiffe://a", "spiffe://b", []string{"r"}, 60)
+	result, err := m2.Mint("spiffe://a", "spiffe://b", []string{"r"}, 60, "")
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestTokenValidation(t *testing.T) {
 	m := newTestMinter(t)
 
 	t.Run("tampered payload is rejected", func(t *testing.T) {
-		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/target", []string{"r:w"}, 60)
+		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/target", []string{"r:w"}, 60, "")
 		if err != nil {
 			t.Fatalf("Mint: %v", err)
 		}
@@ -304,7 +304,7 @@ func TestTokenValidation(t *testing.T) {
 	})
 
 	t.Run("token for wrong audience is rejected", func(t *testing.T) {
-		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/service-a", []string{"r:w"}, 60)
+		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/service-a", []string{"r:w"}, 60, "")
 		if err != nil {
 			t.Fatalf("Mint: %v", err)
 		}
@@ -318,7 +318,7 @@ func TestTokenValidation(t *testing.T) {
 	})
 
 	t.Run("expired token is rejected", func(t *testing.T) {
-		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/target", []string{"r:w"}, 1)
+		result, err := m.Mint("spiffe://cluster.local/caller", "spiffe://cluster.local/target", []string{"r:w"}, 1, "")
 		if err != nil {
 			t.Fatalf("Mint: %v", err)
 		}
