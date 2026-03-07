@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -71,6 +72,28 @@ func (v *Verifier) Refresh(ctx context.Context) (err error) {
 	v.keys = keys
 	v.mu.Unlock()
 	return nil
+}
+
+// StartAutoRefresh starts a background goroutine that calls [Verifier.Refresh]
+// on every interval tick. The goroutine exits when ctx is cancelled. Transient
+// refresh errors are suppressed — the cached keys remain valid until the next
+// successful refresh. Call this once after [NewVerifier] with an interval that
+// matches or is shorter than the server's key_rotation_interval.
+func (v *Verifier) StartAutoRefresh(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := v.Refresh(ctx); err != nil {
+					continue // transient failure; cached keys remain valid until next tick
+				}
+			}
+		}
+	}()
 }
 
 // Verify validates token as an ES256 JWT issued by svid-exchange for audience.
