@@ -48,28 +48,11 @@ All HTTP endpoints are served on `health_addr` (default `:8081`, set in `config/
 
 ### Prometheus metrics
 
-svid-exchange exposes standard gRPC server metrics via the `grpc_server_*` family:
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `grpc_server_started_total` | Counter | Total RPCs received |
-| `grpc_server_handled_total` | Counter | Total RPCs completed, labelled by `grpc_code` (e.g. `OK`, `PermissionDenied`) |
-| `grpc_server_handling_seconds` | Histogram | RPC latency with buckets from 5ms to 10s |
-| `grpc_server_msg_received_total` | Counter | Total request messages received |
-| `grpc_server_msg_sent_total` | Counter | Total response messages sent |
-
-All series are pre-populated at zero on startup for the `Exchange` method, so alerting rules work from day one without waiting for the first call.
+svid-exchange exposes the standard `grpc_server_*` metric family at `/metrics`. All series are pre-populated at zero on startup, so alerting rules work before the first request lands. See [Prometheus Metrics](features/prometheus-metrics.md) for the full reference, notable `grpc_code` values, and known limitations.
 
 ### Distributed tracing
 
-svid-exchange uses [OpenTelemetry](https://opentelemetry.io) for distributed tracing. Tracing is **opt-in** — the service runs normally without any trace backend configured.
-
-When `otlp_endpoint` is set in `config/server.yaml`, every `Exchange` RPC produces a server span with:
-- Operation name: `exchange.v1.TokenExchange/Exchange`
-- W3C TraceContext propagation from incoming gRPC metadata (so upstream callers can link their spans)
-- Buffered export via OTLP gRPC with graceful flush on shutdown
-
-Point the field at any OTLP-compatible backend (Jaeger, Grafana Tempo, Datadog, Honeycomb, etc.). See [Distributed Tracing](features/distributed-tracing.md) for a local Jaeger setup.
+Tracing is **opt-in** — set `otlp_endpoint` in `config/server.yaml` to enable it; leave it empty and no trace backend is needed. When enabled, every `Exchange` RPC produces an OTLP gRPC span with W3C TraceContext propagation. See [Distributed Tracing](features/distributed-tracing.md) for span contents, a local Jaeger setup, and known limitations.
 
 ## Policy file
 

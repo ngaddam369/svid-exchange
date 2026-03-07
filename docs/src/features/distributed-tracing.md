@@ -53,7 +53,7 @@ Every `Exchange` RPC produces one server span with:
 
 ## Limitations
 
-- **No custom attributes yet** — the span does not carry SPIFFE ID, granted scopes, or policy name as span attributes. These would make filtering by identity practical; this is a planned enhancement.
+- **No custom attributes** — the span does not carry SPIFFE ID, granted scopes, or policy name as span attributes. Use audit logs for identity-level filtering.
 - **No sampling configuration** — all requests are sampled. In high-throughput environments you will want to configure a tail- or head-based sampler via the standard OpenTelemetry SDK environment variables (`OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`).
 - **Traces do not replace audit logs** — spans are best-effort and may be dropped under load or if the backend is unavailable. Audit logs are the authoritative record for compliance; traces are an operational debugging tool.
 - **OTLP gRPC only** — HTTP/JSON OTLP is not currently supported. Use a local collector (e.g. OpenTelemetry Collector) if your backend requires it.

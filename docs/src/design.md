@@ -70,16 +70,28 @@ The key design decisions and their rationale:
 | **ES256 over RS256** | ECDSA P-256 keys are smaller (32 bytes vs 256+ bytes for RSA-2048) and faster to verify — relevant when every incoming request to the target service verifies a JWT. |
 | **JWKS endpoint** | Downstream services fetch the public key directly — no shared secret, no manual key distribution, compatible with any standards-compliant JWT library. |
 
-## What svid-exchange does not try to replace
+## Scope and design boundaries
 
-- **SPIRE** — svid-exchange depends on SPIRE for workload identity. It is not an identity provider; it is a consumer of SPIFFE SVIDs.
-- **A service mesh** — mutual authentication at the transport layer (Istio, Linkerd) and scoped authorization tokens are complementary, not competing. A service mesh ensures the *channel* is authenticated; svid-exchange ensures the *operation* is authorized.
-- **A general-purpose authorization server** — svid-exchange is purpose-built for the SPIFFE-to-JWT exchange pattern. It is not a replacement for OPA, Casbin, or a full OAuth 2.0 authorization server.
+svid-exchange is narrow by design. The following boundaries are deliberate — each could be crossed, but doing so would pull the system toward complexity that makes it harder to reason about and harder to trust.
 
-## Current limitations and future work
+**It depends on SPIRE; it does not replace it.** svid-exchange is a consumer of SPIFFE SVIDs, not an identity provider. Workload attestation, trust bundle management, and SVID rotation are SPIRE's job. Building a second identity layer here would mean replicating machinery that SPIRE already handles correctly, and splitting the root of trust across two systems.
 
-| Limitation | Status |
-|------------|--------|
+**It complements a service mesh; it does not replace it.** Mutual TLS at the transport layer (Istio, Linkerd) and scoped authorization tokens solve different problems. A mesh ensures the *channel* is authenticated; svid-exchange ensures the *operation* is authorized. Collapsing the two would mean either losing per-operation scoping or coupling the mesh to a policy engine — neither is a good trade.
+
+**It is not a general-purpose authorization server.** svid-exchange is purpose-built for the SPIFFE-to-JWT exchange pattern. OPA, Casbin, and full OAuth 2.0 servers handle richer policy models (attribute-based, role-hierarchical, user-facing flows). Adding those models here would make policy harder to audit and the denial surface harder to predict.
+
+**It handles machine-to-machine flows only.** Human identity — OIDC, SAML, browser sessions — belongs in an identity provider. Mixing user and workload identity into the same exchange service conflates two trust models that should be reasoned about independently: attested workload identity (verifiable at the transport layer) and asserted user identity (verifiable only by an external IdP).
+
+**Scopes are flat and explicit.** There is no wildcard matching, no role hierarchy, no implied permissions. `payments:*` does not automatically include `payments:charge`. This is intentional — implicit scope inheritance is where privilege escalation bugs hide. Every scope a caller can receive must be spelled out in a policy rule.
+
+**It is not in the per-request hot path.** A caller exchanges its SVID for a JWT once, caches the token for its TTL, and presents it on every downstream call. Token verification happens independently at the target via `/jwks` — svid-exchange is not involved. This means a brief svid-exchange outage does not disrupt in-flight service traffic, and it cannot become a per-request latency bottleneck.
+
+**Enforcement at the target is the target's responsibility.** svid-exchange ensures that only correctly attested, policy-permitted callers receive tokens. It cannot guarantee those tokens are validated before access is granted — that boundary belongs to the receiving service. The trust model only holds if both sides do their part.
+
+## Current limitations
+
+| Limitation | Notes |
+|------------|-------|
 | Signing key is ephemeral by default | `key_rotation_interval` bounds the exposure window per key; hardware-protected keys are supported via the `token.Signer` interface and a KMS adapter (see Security → KMS integration) |
-| Rate limits are per-SPIFFE-ID, not per-target | Per-target limits require policy-file integration and are not yet implemented |
-| Multi-replica rate limiting requires external state | Redis or sidecar integration is a future consideration |
+| Rate limits are per-SPIFFE-ID, not per-target | The limit applies to the total exchange rate from an identity regardless of target; per-target granularity is not supported |
+| Multi-replica rate limiting requires external state | Token buckets are in-process and reset on restart; a shared backend (Redis, sidecar) is needed for strict enforcement across replicas |
