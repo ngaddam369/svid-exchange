@@ -116,6 +116,44 @@ func TestToken(t *testing.T) {
 			},
 		},
 		{
+			name: "background goroutine proactively refreshes token",
+			run: func(t *testing.T) {
+				mock := &mockExchanger{} // default: returns now+300s per call
+				c := newWithExchanger(mock, targetID, []string{"read"}, 0)
+
+				ctx := context.Background()
+				if _, err := c.Token(ctx); err != nil {
+					t.Fatalf("first Token: %v", err)
+				}
+				// Exchange called once. Override refreshAt to fire the goroutine soon.
+				c.cached.mu.Lock()
+				c.cached.refreshAt = time.Now().Add(50 * time.Millisecond)
+				c.cached.mu.Unlock()
+
+				// Start the goroutine after refreshAt is set so it sees a
+				// non-zero value immediately and doesn't enter the 500ms poll.
+				stopCtx, stop := context.WithCancel(context.Background())
+				t.Cleanup(stop)
+				go c.refreshLoop(stopCtx)
+
+				// Wait long enough for the goroutine to fire and refresh.
+				time.Sleep(200 * time.Millisecond)
+
+				if n := mock.callCount(); n < 2 {
+					t.Errorf("Exchange called %d times after background refresh, want >= 2", n)
+				}
+
+				// Token() should be a cache hit — goroutine already warmed the cache.
+				callsBefore := mock.callCount()
+				if _, err := c.Token(ctx); err != nil {
+					t.Fatalf("Token after background refresh: %v", err)
+				}
+				if mock.callCount() != callsBefore {
+					t.Error("Token() triggered a new Exchange after background refresh — cache was not warm")
+				}
+			},
+		},
+		{
 			name: "GRPCCredentials injects Authorization header",
 			run: func(t *testing.T) {
 				mock := &mockExchanger{}

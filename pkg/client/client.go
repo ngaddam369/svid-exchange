@@ -46,10 +46,11 @@ type Options struct {
 // Client fetches scoped JWTs from svid-exchange and caches them until close to
 // expiry. A zero-value Client is not usable; use [New].
 type Client struct {
-	exc  exchanger
-	conn *grpc.ClientConn        // non-nil only when created by New
-	src  *workloadapi.X509Source // non-nil only when created by New
-	opts Options
+	exc         exchanger
+	conn        *grpc.ClientConn        // non-nil only when created by New
+	src         *workloadapi.X509Source // non-nil only when created by New
+	opts        Options
+	stopRefresh func() // non-nil only when created by New; called in Close
 
 	cached struct {
 		mu        sync.Mutex
@@ -91,12 +92,16 @@ func New(ctx context.Context, opts Options) (*Client, error) {
 		return nil, fmt.Errorf("client: dial %q: %w", opts.Addr, err)
 	}
 
-	return &Client{
-		exc:  exchangev1.NewTokenExchangeClient(conn),
-		conn: conn,
-		src:  src,
-		opts: opts,
-	}, nil
+	stopCtx, stopCancel := context.WithCancel(context.Background())
+	c := &Client{
+		exc:         exchangev1.NewTokenExchangeClient(conn),
+		conn:        conn,
+		src:         src,
+		opts:        opts,
+		stopRefresh: stopCancel,
+	}
+	go c.refreshLoop(stopCtx)
+	return c, nil
 }
 
 // Token returns a valid JWT for the configured target and scopes. Cached tokens
@@ -137,9 +142,53 @@ func (c *Client) GRPCCredentials() credentials.PerRPCCredentials {
 	return perRPCCreds{c: c}
 }
 
+// refreshLoop runs as a background goroutine and proactively refreshes the
+// cached token before it reaches refreshAt, eliminating Exchange latency on
+// the first call after an idle period. It exits when ctx is cancelled.
+func (c *Client) refreshLoop(ctx context.Context) {
+	for {
+		c.cached.mu.Lock()
+		refreshAt := c.cached.refreshAt
+		c.cached.mu.Unlock()
+
+		if refreshAt.IsZero() {
+			// No token yet; wait briefly and check again.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+			continue
+		}
+
+		wait := time.Until(refreshAt)
+		if wait > 0 {
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+		}
+
+		if _, err := c.Token(ctx); err != nil {
+			// Transient failure; retry after backoff. On-demand Token() handles callers.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}
+}
+
 // Close releases the gRPC connection and X509Source created by [New].
 // Safe to call on a Client constructed by test helpers (Close is a no-op then).
 func (c *Client) Close() error {
+	if c.stopRefresh != nil {
+		c.stopRefresh()
+	}
 	if c.conn == nil {
 		return nil
 	}
