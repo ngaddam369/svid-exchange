@@ -42,14 +42,7 @@ Secrets and deployment-specific paths are always set via environment variables a
 
 ## HTTP endpoints
 
-All HTTP endpoints are served on `health_addr` (default `:8081`, set in `config/server.yaml`).
-
-| Path | Description |
-|------|-------------|
-| `/health/live` | Liveness probe — always returns `200 OK` while the process is running |
-| `/health/ready` | Readiness probe — returns `200 OK` when policy and minter are initialised; `503` during shutdown |
-| `/jwks` | JSON Web Key Set — public signing key for downstream JWT verification (RFC 7517) |
-| `/metrics` | Prometheus text exposition — gRPC request counts, status codes, and latency histograms |
+All HTTP endpoints are served on `health_addr` (default `:8081`, set in `config/server.yaml`). See [API Reference](api-reference.md#http-endpoints) for the full endpoint list and response details.
 
 The HTTP server has fixed connection timeouts to guard against slow-client (Slowloris) attacks: `ReadHeaderTimeout` 5 s, `ReadTimeout` 10 s, `WriteTimeout` 10 s, `IdleTimeout` 60 s. These are not operator-configurable; they are appropriate for the low-latency, no-body nature of all four endpoints.
 

@@ -21,6 +21,11 @@ type Store struct {
 
 // OpenStore opens (or creates) the BoltDB file at path and ensures the
 // policies bucket exists. Callers must call Close when done.
+//
+// BoltDB uses MVCC with serializable isolation: each read-write transaction
+// (db.Update) sees a consistent snapshot and is the only writer at a time.
+// Read-only transactions (db.View) run concurrently and never block writes.
+// No additional locking is needed around Store method calls.
 func OpenStore(path string) (*Store, error) {
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 3 * time.Second})
 	if err != nil {

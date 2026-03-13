@@ -111,6 +111,7 @@ grpcurl \
   -insecure \
   -cert /tmp/svid/svid.3.pem \
   -key  /tmp/svid/svid.3.key \
+  -proto proto/exchange/v1/exchange.proto \
   -d '{
     "target_service": "spiffe://cluster.local/ns/default/sa/payment",
     "scopes": ["payments:charge", "payments:refund"],
@@ -166,7 +167,7 @@ Services that call svid-exchange can use the `pkg/client` package instead of man
 
 ## Opt-in features
 
-Several security features are disabled by default and enabled via environment variables. Each has dedicated documentation covering motivation, configuration, and known limitations:
+Several features are disabled by default and enabled via `config/server.yaml` (or environment variables where noted). Each has dedicated documentation covering motivation, configuration, and known limitations:
 
 - [Distributed Tracing](features/distributed-tracing.md)
 - [Rate Limiting](features/rate-limiting.md)

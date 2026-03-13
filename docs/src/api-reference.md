@@ -40,10 +40,10 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 |------|-----------|
 | `OK` | Exchange successful |
 | `UNAUTHENTICATED` | No valid SPIFFE ID found in the peer certificate |
-| `INVALID_ARGUMENT` | `target_service` is empty, no scopes were requested, or `on_behalf_of` is malformed, has an invalid signature, or is expired |
+| `INVALID_ARGUMENT` | `target_service` is empty; no scopes were requested; more than 50 scopes were requested; or `on_behalf_of` is malformed, has an invalid signature, or is expired |
 | `PERMISSION_DENIED` | No policy permits this subject → target exchange, or the minted token ID has been revoked |
 | `ALREADY_EXISTS` | The minted token ID was already issued (replay detected) |
-| `RESOURCE_EXHAUSTED` | Per-identity rate limit exceeded (only when `RATE_LIMIT_RPS` is set) |
+| `RESOURCE_EXHAUSTED` | Per-identity rate limit exceeded (only when `rate_limit_rps` is configured) |
 | `CANCELLED` | Client cancelled the request before the exchange completed |
 | `DEADLINE_EXCEEDED` | Request deadline expired before the exchange completed |
 | `INTERNAL` | JWT signing failed (should not occur in normal operation) |
@@ -57,6 +57,7 @@ grpcurl \
   -insecure \
   -cert /tmp/svid/svid.N.pem \
   -key  /tmp/svid/svid.N.key \
+  -proto proto/exchange/v1/exchange.proto \
   -d '{
     "target_service": "spiffe://cluster.local/ns/default/sa/payment",
     "scopes": ["payments:charge"],
@@ -64,8 +65,6 @@ grpcurl \
   }' \
   localhost:8080 exchange.v1.TokenExchange/Exchange
 ```
-
----
 
 ---
 
