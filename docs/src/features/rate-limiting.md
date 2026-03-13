@@ -68,3 +68,7 @@ curl -s http://localhost:8081/metrics | grep ResourceExhausted
 - **In-process state** — the token buckets live in memory and reset on restart. In a multi-replica deployment each replica maintains its own counters; a caller could make `N × RPS` requests across `N` replicas. A shared rate limiter (Redis, a sidecar) would be needed for strict enforcement at scale.
 - **Per-identity, not per-target** — the limit applies to the total request rate from a SPIFFE ID, regardless of which target it is requesting tokens for. Per-target limits are not yet implemented.
 - **No dynamic adjustment** — RPS and burst are set at startup via the config file. Changing them requires a restart.
+
+## Memory management
+
+One token bucket is allocated per unique SPIFFE ID on first use. A background goroutine evicts entries that have been idle for more than one hour, so buckets for short-lived workloads (canaries, batch jobs) do not accumulate indefinitely. Active callers are never evicted — the idle timer resets on every request.

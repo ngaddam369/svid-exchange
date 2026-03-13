@@ -136,7 +136,7 @@ func main() {
 	tlsCfg.MinVersion = tls.VersionTLS13
 
 	metricsInterceptor := initMetrics()
-	rateLimiter := newRateLimitInterceptor(cfg.RateLimitRPS, cfg.RateLimitBurst)
+	rateLimiter := newRateLimitInterceptor(rootCtx, cfg.RateLimitRPS, cfg.RateLimitBurst)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
 		grpc.UnaryInterceptor(chainUnary(metricsInterceptor, rateLimiter)),

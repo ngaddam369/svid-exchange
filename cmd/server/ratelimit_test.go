@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestNewRateLimitInterceptorDisabled(t *testing.T) {
-	interceptor := newRateLimitInterceptor(0, 0)
+	interceptor := newRateLimitInterceptor(context.Background(), 0, 0)
 	if interceptor == nil {
 		t.Fatal("expected non-nil interceptor")
 	}
@@ -32,7 +33,7 @@ func TestNewRateLimitInterceptorDisabled(t *testing.T) {
 }
 
 func TestNewRateLimitInterceptorEnabled(t *testing.T) {
-	interceptor := newRateLimitInterceptor(10, 1)
+	interceptor := newRateLimitInterceptor(context.Background(), 10, 1)
 	if interceptor == nil {
 		t.Fatal("expected non-nil interceptor")
 	}
@@ -40,6 +41,7 @@ func TestNewRateLimitInterceptorEnabled(t *testing.T) {
 
 func TestLimiterStore(t *testing.T) {
 	store := &limiterStore{
+		m:     make(map[string]*limiterEntry),
 		rps:   rate.Limit(1),
 		burst: 1,
 	}
@@ -59,9 +61,41 @@ func TestLimiterStore(t *testing.T) {
 	}
 }
 
+func TestLimiterStoreSweep(t *testing.T) {
+	store := &limiterStore{
+		m:     make(map[string]*limiterEntry),
+		rps:   rate.Limit(1),
+		burst: 1,
+	}
+	active := "spiffe://example.org/ns/default/sa/active"
+	idle := "spiffe://example.org/ns/default/sa/idle"
+
+	store.get(active)
+	store.get(idle)
+
+	// Backdate idle entry's lastSeen so it appears stale.
+	store.mu.Lock()
+	store.m[idle].lastSeen = time.Now().Add(-2 * time.Hour)
+	store.mu.Unlock()
+
+	store.sweep(time.Hour)
+
+	store.mu.Lock()
+	_, hasActive := store.m[active]
+	_, hasIdle := store.m[idle]
+	store.mu.Unlock()
+
+	if !hasActive {
+		t.Error("active entry should survive sweep")
+	}
+	if hasIdle {
+		t.Error("idle entry should be evicted by sweep")
+	}
+}
+
 func TestRateLimitInterceptorDenied(t *testing.T) {
 	// burst=1 so the second call from the same identity is rejected.
-	interceptor := newRateLimitInterceptor(100, 1)
+	interceptor := newRateLimitInterceptor(context.Background(), 100, 1)
 
 	handler := func(_ context.Context, _ any) (any, error) {
 		return "ok", nil
@@ -80,6 +114,7 @@ func TestRateLimitInterceptorResourceExhausted(t *testing.T) {
 	// We cannot call the returned interceptor with a real peer ctx without a
 	// gRPC server, but we can verify the status code path via limiterStore.
 	store := &limiterStore{
+		m:     make(map[string]*limiterEntry),
 		rps:   rate.Limit(1),
 		burst: 0, // no tokens ever available
 	}
@@ -93,6 +128,16 @@ func TestRateLimitInterceptorResourceExhausted(t *testing.T) {
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("unexpected code: %v", status.Code(err))
 	}
+}
+
+func TestRateLimitInterceptorSweepOnShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	interceptor := newRateLimitInterceptor(ctx, 10, 10)
+	if interceptor == nil {
+		t.Fatal("expected non-nil interceptor")
+	}
+	// Cancel context — goroutine should exit cleanly (no panic, no hang).
+	cancel()
 }
 
 func TestChainUnary(t *testing.T) {
