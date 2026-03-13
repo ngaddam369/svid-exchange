@@ -1,13 +1,21 @@
 grpc_addr:   ":8080"
 health_addr: ":8081"
 admin_addr:  ":8082"
+
 # Set to true to enable gRPC server reflection (useful for development with grpcurl).
 # Disabled by default — reflection exposes the full service schema to any connected client.
 grpc_reflection: false
+
+# OTLP gRPC endpoint for distributed tracing. Empty disables tracing.
 otlp_endpoint: ""
+
+# Per-SPIFFE-ID rate limiting (token bucket). 0 disables rate limiting.
 rate_limit_rps:   0
 rate_limit_burst: 0
+
+# Signing key rotation interval (e.g. "24h"). Empty disables rotation.
 key_rotation_interval: ""
+
 # SPIFFE IDs permitted to call the admin gRPC API.
 # Empty list allows any authenticated SPIFFE peer (insecure — set explicitly in production).
 admin_subjects: []
