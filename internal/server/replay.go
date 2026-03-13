@@ -40,27 +40,42 @@ func (c *jtiCache) sweep() {
 }
 
 // revocationList holds explicitly revoked JTIs that must not be honoured
-// even if they have not expired yet.
+// even if they have not expired yet. Entries are lazily evicted once their
+// natural token expiry has passed — a revoked token that has expired can no
+// longer be presented, so there is no need to keep it in the list.
 type revocationList struct {
-	mu  sync.RWMutex
-	set map[string]struct{}
+	mu  sync.Mutex
+	set map[string]time.Time // JTI → token expiry
 }
 
 func newRevocationList() *revocationList {
-	return &revocationList{set: make(map[string]struct{})}
+	return &revocationList{set: make(map[string]time.Time)}
 }
 
-// Revoke adds jti to the revocation list. Safe for concurrent use.
-func (r *revocationList) Revoke(jti string) {
+// Revoke adds jti to the revocation list with its natural token expiry.
+// Once expiresAt passes the entry is swept on the next isRevoked call.
+func (r *revocationList) Revoke(jti string, expiresAt time.Time) {
 	r.mu.Lock()
-	r.set[jti] = struct{}{}
+	r.set[jti] = expiresAt
 	r.mu.Unlock()
 }
 
-// isRevoked returns true if jti has been explicitly revoked.
+// isRevoked returns true if jti has been explicitly revoked and has not yet
+// expired naturally. Expired entries are evicted on each call.
 func (r *revocationList) isRevoked(jti string) bool {
-	r.mu.RLock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sweep()
 	_, ok := r.set[jti]
-	r.mu.RUnlock()
 	return ok
+}
+
+// sweep removes entries whose token expiry has passed. Must be called with r.mu held.
+func (r *revocationList) sweep() {
+	now := time.Now()
+	for jti, exp := range r.set {
+		if now.After(exp) {
+			delete(r.set, jti)
+		}
+	}
 }

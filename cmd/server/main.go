@@ -176,7 +176,7 @@ func main() {
 	loaded := 0
 	for _, r := range revocations {
 		if r.ExpiresAt > time.Now().Unix() {
-			svc.Revoke(r.JTI)
+			svc.Revoke(r.JTI, time.Unix(r.ExpiresAt, 0))
 			loaded++
 		} else {
 			if err := store.DeleteRevocation(r.JTI); err != nil {

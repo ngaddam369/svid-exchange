@@ -144,7 +144,7 @@ func TestReplayAndRevocation(t *testing.T) {
 	t.Run("revoked JTI is rejected with PermissionDenied", func(t *testing.T) {
 		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), okMinter(), mockAudit{})
 
-		svc.Revoke("test-jti")
+		svc.Revoke("test-jti", time.Now().Add(time.Minute))
 
 		_, err := svc.Exchange(context.Background(), newValidReq())
 		if status.Code(err) != codes.PermissionDenied {

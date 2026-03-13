@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -61,10 +62,11 @@ func New(e IDExtractor, p PolicyEvaluator, m TokenMinter, a AuditLogger) *TokenE
 	}
 }
 
-// Revoke adds jti to the server's revocation list. Any subsequent exchange
-// that produces the same token ID is rejected with codes.PermissionDenied.
-func (s *TokenExchangeServer) Revoke(jti string) {
-	s.revoked.Revoke(jti)
+// Revoke adds jti to the server's revocation list with its natural token expiry.
+// Any subsequent exchange that produces the same token ID is rejected with
+// codes.PermissionDenied. Once expiresAt passes the entry is evicted automatically.
+func (s *TokenExchangeServer) Revoke(jti string, expiresAt time.Time) {
+	s.revoked.Revoke(jti, expiresAt)
 }
 
 // Exchange validates the caller's SVID, applies policy, and mints a token.
