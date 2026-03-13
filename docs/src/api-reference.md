@@ -77,7 +77,9 @@ grpcurl \
 
 **Transport:** mTLS required — same SPIRE-issued certificates as the data-plane port.
 
-> **Restrict this port.** The admin service can add and delete policies. It must not be reachable from workloads that consume the `TokenExchange` API. Use a firewall rule, Kubernetes `NetworkPolicy`, or a separate network interface to limit access to administrative clients only.
+**Access control:** Configure `admin_subjects` in `config/server.yaml` to restrict which SPIFFE IDs may call this service. When the list is empty any authenticated peer is allowed (a startup warning is emitted). See [Admin API access control](security.md#admin-api-access-control).
+
+> **Restrict this port.** The admin service can add and delete policies and revoke tokens. It must not be reachable from workloads that consume the `TokenExchange` API. Use a firewall rule, Kubernetes `NetworkPolicy`, or a separate network interface to limit access to administrative clients only.
 
 ### CreatePolicy
 

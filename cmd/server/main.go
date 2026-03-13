@@ -192,7 +192,15 @@ func main() {
 	// Separate listener on admin_addr so it can be network-restricted
 	// independently of the data-plane gRPC port.
 	// Uses the same mTLS credentials as the data-plane server.
-	adminServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)))
+	if len(cfg.AdminSubjects) == 0 {
+		log.Warn().Msg("admin_subjects not configured — any authenticated SPIFFE peer may call admin endpoints")
+	} else {
+		log.Info().Strs("subjects", cfg.AdminSubjects).Msg("admin API RBAC allowlist active")
+	}
+	adminServer := grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(tlsCfg)),
+		grpc.UnaryInterceptor(newAdminAuthInterceptor(cfg.AdminSubjects, spiffe.Extractor{})),
+	)
 	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap, reloadPolicy, svc.Revoke)
 	adminv1.RegisterPolicyAdminServer(adminServer, adminSvc)
 	if cfg.GRPCReflection {

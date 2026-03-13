@@ -6,3 +6,6 @@ otlp_endpoint: ""
 rate_limit_rps:   0
 rate_limit_burst: 0
 key_rotation_interval: ""
+# SPIFFE IDs permitted to call the admin gRPC API.
+# Empty list allows any authenticated SPIFFE peer (insecure — set explicitly in production).
+admin_subjects: []

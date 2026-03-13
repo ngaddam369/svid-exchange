@@ -35,19 +35,21 @@ type Config struct {
 	KeyRotationInterval time.Duration
 	SpiffeSocket        string
 	AuditHMACKey        []byte
+	AdminSubjects       []string
 }
 
 // configFile mirrors the YAML structure of config/server.yaml.
 // KeyRotationInterval is kept as a string for parsing via time.ParseDuration.
 type configFile struct {
-	GRPCAddr            string  `yaml:"grpc_addr"`
-	HealthAddr          string  `yaml:"health_addr"`
-	AdminAddr           string  `yaml:"admin_addr"`
-	GRPCReflection      bool    `yaml:"grpc_reflection"`
-	OTLPEndpoint        string  `yaml:"otlp_endpoint"`
-	RateLimitRPS        float64 `yaml:"rate_limit_rps"`
-	RateLimitBurst      int     `yaml:"rate_limit_burst"`
-	KeyRotationInterval string  `yaml:"key_rotation_interval"`
+	GRPCAddr            string   `yaml:"grpc_addr"`
+	HealthAddr          string   `yaml:"health_addr"`
+	AdminAddr           string   `yaml:"admin_addr"`
+	GRPCReflection      bool     `yaml:"grpc_reflection"`
+	OTLPEndpoint        string   `yaml:"otlp_endpoint"`
+	RateLimitRPS        float64  `yaml:"rate_limit_rps"`
+	RateLimitBurst      int      `yaml:"rate_limit_burst"`
+	KeyRotationInterval string   `yaml:"key_rotation_interval"`
+	AdminSubjects       []string `yaml:"admin_subjects"`
 }
 
 // loadConfig reads the YAML config file (path from CONFIG_FILE env var,
@@ -79,6 +81,7 @@ func loadConfig() (Config, error) {
 		OTLPEndpoint:   f.OTLPEndpoint,
 		RateLimitRPS:   f.RateLimitRPS,
 		RateLimitBurst: f.RateLimitBurst,
+		AdminSubjects:  f.AdminSubjects,
 		PolicyFile:     defaultPolicyFile,
 		PolicyDB:       defaultPolicyDB,
 	}

@@ -205,6 +205,23 @@ Plain JSON logs can be silently modified or deleted. When `AUDIT_HMAC_KEY` is se
 
 See [Audit Log Integrity](features/audit-log-integrity.md) for how the signing works, how to verify logs offline, and the known limitations (key management, real-time prevention).
 
+## Admin API access control
+
+The admin gRPC service (`:8082`) can add and delete exchange policies, revoke tokens, and trigger policy reloads. Leaving it open to every authenticated SPIFFE peer is unsafe: a compromised workload could modify policy or freeze the mesh.
+
+Configure an explicit allowlist in `config/server.yaml`:
+
+```yaml
+admin_subjects:
+  - "spiffe://cluster.local/ns/ops/sa/policy-manager"
+```
+
+A gRPC unary interceptor extracts the caller's SPIFFE ID from the mTLS peer certificate — the same trust anchor used by the data-plane — and rejects any caller whose ID is not in the list with `PERMISSION_DENIED`. The TLS handshake guarantees that the SPIFFE ID cannot be forged.
+
+When `admin_subjects` is empty the server emits a startup warning and allows any authenticated peer. This preserves backward compatibility but must not be used in production.
+
+See [Configuration](configuration.md#admin-api-access-control) for the full `admin_subjects` reference.
+
 ## gRPC reflection
 
 gRPC server reflection is enabled by default (useful for development with grpcurl). For production deployments, disable it in `config/server.yaml`:

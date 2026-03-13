@@ -21,6 +21,10 @@ rate_limit_burst: 0
 
 # Signing key rotation interval (e.g. "24h"). Empty disables rotation.
 key_rotation_interval: ""
+
+# SPIFFE IDs permitted to call the admin gRPC API.
+# Empty list allows any authenticated SPIFFE peer (insecure — set explicitly in production).
+admin_subjects: []
 ```
 
 ## Environment variables
@@ -120,6 +124,20 @@ POLICY_FILE=/path/to/my-policy.yaml make validate-policy
 ```
 
 Exit code is `0` on success, `1` on any validation error.
+
+## Admin API access control
+
+`admin_subjects` is a list of SPIFFE IDs that may call any method on the admin gRPC service (`:8082`). On every inbound admin RPC the server extracts the caller's SPIFFE ID from the mTLS peer certificate and checks it against this list.
+
+```yaml
+admin_subjects:
+  - "spiffe://cluster.local/ns/ops/sa/policy-manager"
+  - "spiffe://cluster.local/ns/ops/sa/ci-deployer"
+```
+
+When the list is empty the server logs a warning at startup and allows any authenticated SPIFFE peer. This is the default to preserve backward compatibility but **must not be used in production**.
+
+See [Admin API access control](security.md#admin-api-access-control) in the Security guide for the threat model.
 
 ## Scope intersection
 
