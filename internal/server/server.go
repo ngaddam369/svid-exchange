@@ -16,6 +16,11 @@ import (
 	exchangev1 "github.com/ngaddam369/svid-exchange/proto/exchange/v1"
 )
 
+// maxScopes is the maximum number of scopes a single exchange request may carry.
+// Requests exceeding this are rejected with InvalidArgument before any policy
+// evaluation runs, bounding the cost of scope intersection for malformed inputs.
+const maxScopes = 50
+
 // IDExtractor extracts the caller's SPIFFE ID from the request context.
 type IDExtractor interface {
 	ExtractID(ctx context.Context) (string, error)
@@ -81,6 +86,9 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 	}
 	if len(req.Scopes) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "at least one scope is required")
+	}
+	if len(req.Scopes) > maxScopes {
+		return nil, status.Errorf(codes.InvalidArgument, "too many scopes: %d exceeds maximum of %d", len(req.Scopes), maxScopes)
 	}
 
 	var actSubject string

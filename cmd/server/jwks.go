@@ -11,6 +11,10 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// p256UncompressedLen is the expected length of a P-256 uncompressed public key
+// point (0x04 || X || Y, each coordinate 32 bytes).
+const p256UncompressedLen = 65
+
 // keyProvider returns the set of currently active public signing keys.
 // During a rotation window more than one key may be active.
 type keyProvider interface {
@@ -65,10 +69,14 @@ func newJWKSHandler(kp keyProvider, log zerolog.Logger) http.HandlerFunc {
 // kid is the RFC 7638 SHA-256 thumbprint of the key.
 func pubToJWK(pub *ecdsa.PublicKey) (jwkKey, error) {
 	// pub.Bytes() returns the uncompressed point: 0x04 || X || Y.
-	// Each coordinate is byteLen bytes (32 for P-256).
+	// We assert the expected format so a future API change cannot silently
+	// produce incorrect coordinates.
 	raw, err := pub.Bytes()
 	if err != nil {
 		return jwkKey{}, fmt.Errorf("encode public key: %w", err)
+	}
+	if len(raw) != p256UncompressedLen || raw[0] != 0x04 {
+		return jwkKey{}, fmt.Errorf("unexpected public key encoding: want 65-byte uncompressed P-256 point, got %d bytes with prefix 0x%02x", len(raw), raw[0])
 	}
 	byteLen := (len(raw) - 1) / 2
 	x := base64.RawURLEncoding.EncodeToString(raw[1 : 1+byteLen])

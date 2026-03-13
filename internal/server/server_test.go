@@ -258,6 +258,17 @@ func TestExchange(t *testing.T) {
 			wantCode: codes.InvalidArgument,
 		},
 		{
+			name:      "too many scopes",
+			extractor: okExtractor(),
+			policy:    deniedPolicy(),
+			minter:    okMinter(),
+			req: &exchangev1.ExchangeRequest{
+				TargetService: "spiffe://cluster.local/ns/default/sa/payment",
+				Scopes:        make([]string, 51),
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
 			name:      "policy denied",
 			extractor: okExtractor(),
 			policy:    deniedPolicy(),
