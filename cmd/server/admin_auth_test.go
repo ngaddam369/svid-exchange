@@ -16,8 +16,8 @@ const (
 	adminSubjectB = "spiffe://cluster.local/ns/admin/sa/other"
 )
 
-// mockIDExtractor implements idExtractor for testing. It records how many times
-// ExtractID was called and returns configurable id/err values.
+// mockIDExtractor implements server.IDExtractor for testing. It records how many
+// times ExtractID was called and returns configurable id/err values.
 type mockIDExtractor struct {
 	mu    sync.Mutex
 	calls int

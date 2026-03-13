@@ -6,17 +6,14 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-)
 
-// idExtractor retrieves the caller's SPIFFE ID from an incoming gRPC context.
-type idExtractor interface {
-	ExtractID(context.Context) (string, error)
-}
+	"github.com/ngaddam369/svid-exchange/internal/server"
+)
 
 // newAdminAuthInterceptor returns a gRPC unary interceptor that enforces an
 // allowlist of SPIFFE IDs on the admin API. When allowedSubjects is empty the
 // interceptor is a no-op and any authenticated peer may call admin endpoints.
-func newAdminAuthInterceptor(allowedSubjects []string, ext idExtractor) grpc.UnaryServerInterceptor {
+func newAdminAuthInterceptor(allowedSubjects []string, ext server.IDExtractor) grpc.UnaryServerInterceptor {
 	allowed := make(map[string]struct{}, len(allowedSubjects))
 	for _, s := range allowedSubjects {
 		allowed[s] = struct{}{}
