@@ -228,8 +228,12 @@ func main() {
 	mux.HandleFunc("/jwks", newJWKSHandler(minter, log))
 	mux.Handle("/metrics", newMetricsHandler())
 	healthServer := &http.Server{
-		Addr:    cfg.HealthAddr,
-		Handler: mux,
+		Addr:              cfg.HealthAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// --- Start ---

@@ -50,6 +50,8 @@ All HTTP endpoints are served on `health_addr` (default `:8081`, set in `config/
 | `/jwks` | JSON Web Key Set — public signing key for downstream JWT verification (RFC 7517) |
 | `/metrics` | Prometheus text exposition — gRPC request counts, status codes, and latency histograms |
 
+The HTTP server has fixed connection timeouts to guard against slow-client (Slowloris) attacks: `ReadHeaderTimeout` 5 s, `ReadTimeout` 10 s, `WriteTimeout` 10 s, `IdleTimeout` 60 s. These are not operator-configurable; they are appropriate for the low-latency, no-body nature of all four endpoints.
+
 ### Prometheus metrics
 
 svid-exchange exposes the standard `grpc_server_*` metric family at `/metrics`. All series are pre-populated at zero on startup, so alerting rules work before the first request lands. See [Prometheus Metrics](features/prometheus-metrics.md) for the full reference, notable `grpc_code` values, and known limitations.
