@@ -205,6 +205,18 @@ Plain JSON logs can be silently modified or deleted. When `AUDIT_HMAC_KEY` is se
 
 See [Audit Log Integrity](features/audit-log-integrity.md) for how the signing works, how to verify logs offline, and the known limitations (key management, real-time prevention).
 
+## Token delegation (`on_behalf_of`)
+
+When `on_behalf_of` is set in an `ExchangeRequest`, the server extracts the `sub` claim from that JWT and embeds it as `act.sub` in the issued token (RFC 8693). Before the `sub` is trusted, the JWT is fully validated:
+
+- **Signature** — must match the current (or outgoing rotation-window) ES256 public key held by the minter; any other key is rejected
+- **Expiry** — must not be expired; the `exp` claim is required
+- **Issuer** — must be `svid-exchange`
+
+Audience is intentionally not checked because the `on_behalf_of` token was issued for an intermediate service, not for svid-exchange itself.
+
+A JWT that fails any of these checks is rejected with `INVALID_ARGUMENT` before policy evaluation runs.
+
 ## Admin API access control
 
 The admin gRPC service (`:8082`) can add and delete exchange policies, revoke tokens, and trigger policy reloads. Leaving it open to every authenticated SPIFFE peer is unsafe: a compromised workload could modify policy or freeze the mesh.

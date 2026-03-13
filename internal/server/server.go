@@ -3,10 +3,8 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
+	"crypto/ecdsa"
 	"fmt"
-	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,9 +26,11 @@ type PolicyEvaluator interface {
 	Evaluate(subject, target string, scopes []string, ttlSeconds int32) policy.EvalResult
 }
 
-// TokenMinter mints a signed JWT for an authorised exchange.
+// TokenMinter mints a signed JWT for an authorised exchange and exposes the
+// active public keys so that on_behalf_of tokens can be verified.
 type TokenMinter interface {
 	Mint(subject, target string, scopes []string, ttlSeconds int32, actSubject string) (token.MintResult, error)
+	PublicKeys() []*ecdsa.PublicKey
 }
 
 // AuditLogger records exchange events for the audit trail.
@@ -61,30 +61,6 @@ func New(e IDExtractor, p PolicyEvaluator, m TokenMinter, a AuditLogger) *TokenE
 	}
 }
 
-// extractSubFromJWT decodes the payload segment of a JWT (without verifying
-// the signature) and returns the sub claim. Returns an error if the JWT is
-// malformed or has no sub claim.
-func extractSubFromJWT(raw string) (string, error) {
-	parts := strings.SplitN(raw, ".", 3)
-	if len(parts) != 3 {
-		return "", fmt.Errorf("malformed JWT: expected 3 segments")
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", fmt.Errorf("decode JWT payload: %w", err)
-	}
-	var claims struct {
-		Sub string `json:"sub"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return "", fmt.Errorf("unmarshal JWT claims: %w", err)
-	}
-	if claims.Sub == "" {
-		return "", fmt.Errorf("JWT has no sub claim")
-	}
-	return claims.Sub, nil
-}
-
 // Revoke adds jti to the server's revocation list. Any subsequent exchange
 // that produces the same token ID is rejected with codes.PermissionDenied.
 func (s *TokenExchangeServer) Revoke(jti string) {
@@ -107,7 +83,7 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 
 	var actSubject string
 	if req.OnBehalfOf != "" {
-		actSubject, err = extractSubFromJWT(req.OnBehalfOf)
+		actSubject, err = token.VerifyJWT(req.OnBehalfOf, s.minter.PublicKeys())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "on_behalf_of: %v", err)
 		}

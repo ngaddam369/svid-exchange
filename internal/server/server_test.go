@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -38,14 +39,19 @@ func (m mockPolicy) Evaluate(_, _ string, _ []string, _ int32) policy.EvalResult
 }
 
 type mockMinter struct {
-	result  token.MintResult
-	err     error
-	lastAct string // actSubject passed to the most recent Mint call
+	result     token.MintResult
+	err        error
+	lastAct    string             // actSubject passed to the most recent Mint call
+	publicKeys []*ecdsa.PublicKey // returned by PublicKeys(); nil means no keys
 }
 
 func (m *mockMinter) Mint(_, _ string, _ []string, _ int32, actSubject string) (token.MintResult, error) {
 	m.lastAct = actSubject
 	return m.result, m.err
+}
+
+func (m *mockMinter) PublicKeys() []*ecdsa.PublicKey {
+	return m.publicKeys
 }
 
 type mockAudit struct{}
@@ -78,9 +84,8 @@ func deniedPolicy() mockPolicy {
 	return mockPolicy{result: policy.EvalResult{Allowed: false}}
 }
 
-// makeTestJWT builds a minimal unsigned JWT string with the given sub claim.
-// extractSubFromJWT only decodes the payload without verifying the signature,
-// so the signature segment can be arbitrary.
+// makeTestJWT builds a minimal JWT string with a fake signature for the given
+// sub claim. Used in tests that verify forged/unsigned JWTs are rejected.
 func makeTestJWT(sub string) string {
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES256","typ":"JWT"}`))
 	payload, _ := json.Marshal(map[string]string{"sub": sub})
@@ -277,26 +282,6 @@ func TestExchange(t *testing.T) {
 			wantCode: codes.Internal,
 		},
 		{
-			name:      "delegation: act subject forwarded to minter",
-			extractor: okExtractor(),
-			policy:    allowedPolicy([]string{"payments:charge"}, 300),
-			minter:    okMinter(),
-			req: &exchangev1.ExchangeRequest{
-				TargetService: "spiffe://cluster.local/ns/default/sa/payment",
-				Scopes:        []string{"payments:charge"},
-				TtlSeconds:    300,
-				OnBehalfOf:    makeTestJWT("user-xyz"),
-			},
-			wantCode:   codes.OK,
-			wantScopes: []string{"payments:charge"},
-			check: func(t *testing.T, m server.TokenMinter) {
-				t.Helper()
-				if got := m.(*mockMinter).lastAct; got != "user-xyz" {
-					t.Errorf("actSubject passed to Mint = %q, want %q", got, "user-xyz")
-				}
-			},
-		},
-		{
 			name:      "delegation: malformed on_behalf_of rejected",
 			extractor: okExtractor(),
 			policy:    allowedPolicy([]string{"payments:charge"}, 300),
@@ -349,4 +334,86 @@ func TestExchange(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOnBehalfOf tests the on_behalf_of validation path that requires a
+// properly signed JWT from this service. Uses a real token.Minter to produce
+// valid and expired tokens; the exchange server's mockMinter is pre-loaded with
+// the same public keys so VerifyJWT can authenticate the delegate token.
+func TestOnBehalfOf(t *testing.T) {
+	delegateMinter, err := token.NewMinter()
+	if err != nil {
+		t.Fatalf("create delegate minter: %v", err)
+	}
+
+	// Mint a valid delegate token (sub = "user-xyz").
+	delegateResult, err := delegateMinter.Mint(
+		"user-xyz",
+		"spiffe://cluster.local/ns/default/sa/payment",
+		[]string{"read"}, 300, "")
+	if err != nil {
+		t.Fatalf("mint delegate token: %v", err)
+	}
+
+	// exchangeMinter is the mock used by the exchange server. It knows the
+	// delegate minter's public keys so it can verify on_behalf_of tokens.
+	exchangeMinter := &mockMinter{
+		result: token.MintResult{
+			Token:     "signed-jwt",
+			TokenID:   "test-jti",
+			ExpiresAt: time.Now().Add(5 * time.Minute),
+		},
+		publicKeys: delegateMinter.PublicKeys(),
+	}
+
+	t.Run("valid signed on_behalf_of: sub forwarded to minter", func(t *testing.T) {
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), exchangeMinter, mockAudit{})
+		_, err := svc.Exchange(context.Background(), &exchangev1.ExchangeRequest{
+			TargetService: "spiffe://cluster.local/ns/default/sa/payment",
+			Scopes:        []string{"payments:charge"},
+			TtlSeconds:    300,
+			OnBehalfOf:    delegateResult.Token,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := exchangeMinter.lastAct; got != "user-xyz" {
+			t.Errorf("actSubject = %q, want %q", got, "user-xyz")
+		}
+	})
+
+	t.Run("forged unsigned on_behalf_of is rejected", func(t *testing.T) {
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), exchangeMinter, mockAudit{})
+		_, err := svc.Exchange(context.Background(), &exchangev1.ExchangeRequest{
+			TargetService: "spiffe://cluster.local/ns/default/sa/payment",
+			Scopes:        []string{"payments:charge"},
+			TtlSeconds:    300,
+			OnBehalfOf:    makeTestJWT("admin"),
+		})
+		if code := status.Code(err); code != codes.InvalidArgument {
+			t.Errorf("expected InvalidArgument for forged JWT, got %v: %v", code, err)
+		}
+	})
+
+	t.Run("expired on_behalf_of is rejected", func(t *testing.T) {
+		expiredResult, err := delegateMinter.Mint(
+			"user-xyz",
+			"spiffe://cluster.local/ns/default/sa/payment",
+			[]string{"read"}, 1, "")
+		if err != nil {
+			t.Fatalf("mint expired token: %v", err)
+		}
+		time.Sleep(1100 * time.Millisecond)
+
+		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), exchangeMinter, mockAudit{})
+		_, err = svc.Exchange(context.Background(), &exchangev1.ExchangeRequest{
+			TargetService: "spiffe://cluster.local/ns/default/sa/payment",
+			Scopes:        []string{"payments:charge"},
+			TtlSeconds:    300,
+			OnBehalfOf:    expiredResult.Token,
+		})
+		if code := status.Code(err); code != codes.InvalidArgument {
+			t.Errorf("expected InvalidArgument for expired JWT, got %v: %v", code, err)
+		}
+	})
 }

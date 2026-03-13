@@ -23,7 +23,7 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 | `target_service` | string | SPIFFE ID of the target service |
 | `scopes` | repeated string | Permission scopes being requested |
 | `ttl_seconds` | int32 | Requested token lifetime in seconds; capped to the policy `max_ttl` |
-| `on_behalf_of` | string | Optional JWT identifying the principal this service is acting for; when set, the resulting token carries an `act.sub` claim (RFC 8693) containing the subject extracted from this JWT |
+| `on_behalf_of` | string | Optional JWT identifying the principal this service is acting for; when set, the server verifies the JWT's signature, expiry, and issuer before embedding its `sub` as `act.sub` in the issued token (RFC 8693); rejected with `INVALID_ARGUMENT` if invalid or expired |
 
 #### ExchangeResponse
 
@@ -40,7 +40,7 @@ rpc Exchange(ExchangeRequest) returns (ExchangeResponse);
 |------|-----------|
 | `OK` | Exchange successful |
 | `UNAUTHENTICATED` | No valid SPIFFE ID found in the peer certificate |
-| `INVALID_ARGUMENT` | `target_service` is empty, no scopes were requested, or `on_behalf_of` is a malformed JWT |
+| `INVALID_ARGUMENT` | `target_service` is empty, no scopes were requested, or `on_behalf_of` is malformed, has an invalid signature, or is expired |
 | `PERMISSION_DENIED` | No policy permits this subject → target exchange, or the minted token ID has been revoked |
 | `ALREADY_EXISTS` | The minted token ID was already issued (replay detected) |
 | `RESOURCE_EXHAUSTED` | Per-identity rate limit exceeded (only when `RATE_LIMIT_RPS` is set) |

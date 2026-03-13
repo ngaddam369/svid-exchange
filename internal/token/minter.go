@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -142,4 +143,39 @@ func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32,
 		ExpiresAt:     exp,
 		GrantedScopes: scopes,
 	}, nil
+}
+
+// VerifyJWT validates an ES256 JWT produced by this service and returns its
+// sub claim. The signature must match at least one of the provided public keys,
+// the token must not be expired, and its issuer must be "svid-exchange".
+// Audience is intentionally not checked: on_behalf_of tokens were issued for
+// an intermediate service, not for svid-exchange.
+func VerifyJWT(raw string, keys []*ecdsa.PublicKey) (string, error) {
+	if len(keys) == 0 {
+		return "", fmt.Errorf("no signing keys available")
+	}
+	var lastErr error
+	for _, key := range keys {
+		tok, err := jwt.Parse(raw, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodECDSA); !ok {
+				return nil, fmt.Errorf("unexpected signing method %q", t.Header["alg"])
+			}
+			return key, nil
+		}, jwt.WithIssuer(issuer), jwt.WithExpirationRequired())
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		claims, ok := tok.Claims.(jwt.MapClaims)
+		if !ok || !tok.Valid {
+			lastErr = fmt.Errorf("invalid token claims")
+			continue
+		}
+		sub, ok := claims["sub"].(string)
+		if !ok || sub == "" {
+			return "", fmt.Errorf("JWT has no sub claim")
+		}
+		return sub, nil
+	}
+	return "", lastErr
 }
