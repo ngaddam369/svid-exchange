@@ -7,12 +7,21 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// jwksHTTPClient is used for all JWKS fetches. The 10 s timeout bounds how long
+// Refresh can block independently of any caller-supplied context deadline. The
+// 1 MiB body cap prevents a malicious or misconfigured endpoint from streaming
+// an unbounded response into memory.
+var jwksHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+const jwksBodyLimit = 1 << 20 // 1 MiB
 
 // Verifier fetches the signing public key from a JWKS endpoint and validates
 // inbound JWTs. During a key rotation window the server publishes two keys;
@@ -40,7 +49,7 @@ func (v *Verifier) Refresh(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := jwksHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch JWKS: %w", err)
 	}
@@ -55,7 +64,7 @@ func (v *Verifier) Refresh(ctx context.Context) (err error) {
 	}
 
 	var doc jwksResponse
-	if err = json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, jwksBodyLimit)).Decode(&doc); err != nil {
 		return fmt.Errorf("decode JWKS: %w", err)
 	}
 

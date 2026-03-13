@@ -1,7 +1,9 @@
 grpc_addr:   ":8080"
 health_addr: ":8081"
 admin_addr:  ":8082"
-grpc_reflection: true
+# Set to true to enable gRPC server reflection (useful for development with grpcurl).
+# Disabled by default — reflection exposes the full service schema to any connected client.
+grpc_reflection: false
 otlp_endpoint: ""
 rate_limit_rps:   0
 rate_limit_burst: 0

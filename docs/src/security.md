@@ -236,10 +236,12 @@ See [Configuration](configuration.md#admin-api-access-control) for the full `adm
 
 ## gRPC reflection
 
-gRPC server reflection is enabled by default (useful for development with grpcurl). For production deployments, disable it in `config/server.yaml`:
+gRPC server reflection is **disabled by default**. When disabled, clients cannot enumerate available services or methods without the `.proto` file, which limits reconnaissance if the gRPC port is ever exposed.
+
+Enable it in `config/server.yaml` for local development with grpcurl:
 
 ```yaml
-grpc_reflection: false
+grpc_reflection: true
 ```
 
-When disabled, clients cannot enumerate available services or methods without the `.proto` file.
+Do not enable reflection in production.

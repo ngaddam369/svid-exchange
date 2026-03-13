@@ -119,6 +119,10 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 	if s.revoked.isRevoked(minted.TokenID) {
 		return nil, status.Error(codes.PermissionDenied, "token id has been revoked")
 	}
+	// alreadyIssued is belt-and-suspenders: Mint() generates a UUID v4 JTI on
+	// every call so a collision is statistically impossible in normal operation.
+	// The check guards against hypothetical minter bugs or future non-UUID JTI
+	// schemes that might reuse IDs.
 	if s.cache.alreadyIssued(minted.TokenID, minted.ExpiresAt) {
 		return nil, status.Error(codes.AlreadyExists, "token id already issued")
 	}

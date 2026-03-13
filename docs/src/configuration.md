@@ -9,8 +9,9 @@ grpc_addr:   ":8080"
 health_addr: ":8081"
 admin_addr:  ":8082"
 
-# Set to false to disable gRPC server reflection (recommended for production).
-grpc_reflection: true
+# Set to true to enable gRPC server reflection (useful for development with grpcurl).
+# Disabled by default — reflection exposes the full service schema to any connected client.
+grpc_reflection: false
 
 # OTLP gRPC endpoint for distributed tracing. Empty disables tracing.
 otlp_endpoint: ""
