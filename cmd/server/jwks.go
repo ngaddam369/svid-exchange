@@ -2,13 +2,14 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/rs/zerolog"
+
+	"github.com/ngaddam369/svid-exchange/internal/token"
 )
 
 // p256UncompressedLen is the expected length of a P-256 uncompressed public key
@@ -82,20 +83,10 @@ func pubToJWK(pub *ecdsa.PublicKey) (jwkKey, error) {
 	x := base64.RawURLEncoding.EncodeToString(raw[1 : 1+byteLen])
 	y := base64.RawURLEncoding.EncodeToString(raw[1+byteLen:])
 
-	// RFC 7638: thumbprint = SHA-256 of canonical JSON with members in
-	// lexicographic order: crv, kty, x, y.
-	type thumbInput struct {
-		Crv string `json:"crv"`
-		Kty string `json:"kty"`
-		X   string `json:"x"`
-		Y   string `json:"y"`
-	}
-	thumbJSON, err := json.Marshal(thumbInput{Crv: "P-256", Kty: "EC", X: x, Y: y})
+	kid, err := token.KeyID(pub)
 	if err != nil {
-		return jwkKey{}, fmt.Errorf("marshal thumbprint: %w", err)
+		return jwkKey{}, fmt.Errorf("compute kid: %w", err)
 	}
-	sum := sha256.Sum256(thumbJSON)
-	kid := base64.RawURLEncoding.EncodeToString(sum[:])
 
 	return jwkKey{
 		Kty: "EC",

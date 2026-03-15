@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -69,6 +70,16 @@ func main() {
 	}
 
 	// --- Token minter ---
+	// Validate the rotation-vs-TTL invariant before starting the key rotation
+	// goroutine: every policy's max_ttl must not exceed key_rotation_interval.
+	// After two rotations the previous key is evicted; if a token's TTL exceeds
+	// the rotation interval it could still be valid when its signing key is gone.
+	if cfg.KeyRotationInterval > 0 {
+		if err = checkRotationInvariant(ap.ptr.Load().Policies(), cfg.KeyRotationInterval); err != nil {
+			log.Fatal().Err(err).Msg("invalid config")
+		}
+	}
+
 	minter, err := token.NewMinter()
 	if err != nil {
 		log.Fatal().Err(err).Msg("init minter")
@@ -165,7 +176,15 @@ func main() {
 			return err
 		}
 		ap.setBase(newPolicy.Policies())
-		return ap.rebuild(store)
+		if err = ap.rebuild(store); err != nil {
+			return err
+		}
+		if cfg.KeyRotationInterval > 0 {
+			if err = checkRotationInvariant(ap.ptr.Load().Policies(), cfg.KeyRotationInterval); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	// Restore persisted revocations into the in-memory list.
@@ -265,9 +284,9 @@ func main() {
 
 	log.Info().Msg("shutting down")
 	ready.Store(false)
-	rootCancel()               // stop Workload API watcher
 	grpcServer.GracefulStop()  // drain in-flight RPCs (source still serves from cache)
 	adminServer.GracefulStop() // drain in-flight admin RPCs
+	rootCancel()               // stop Workload API watcher and rotation goroutine
 	if err := store.Close(); err != nil {
 		log.Error().Err(err).Msg("close policy store")
 	}
@@ -285,4 +304,18 @@ func main() {
 	}
 
 	log.Info().Msg("stopped")
+}
+
+// checkRotationInvariant returns an error if any policy's max_ttl exceeds the
+// key rotation interval. After two rotations the previous key is evicted, so
+// a token whose TTL exceeds the rotation interval could still be valid when
+// its signing key is no longer served by /jwks.
+func checkRotationInvariant(policies []policy.Policy, interval time.Duration) error {
+	for _, p := range policies {
+		if time.Duration(p.MaxTTL)*time.Second > interval {
+			return fmt.Errorf("policy %q: max_ttl %ds exceeds key_rotation_interval %s — tokens would outlive their signing key",
+				p.Name, p.MaxTTL, interval)
+		}
+	}
+	return nil
 }

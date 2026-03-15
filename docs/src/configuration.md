@@ -135,6 +135,52 @@ When the list is empty the server logs a warning at startup and allows any authe
 
 See [Admin API access control](security.md#admin-api-access-control) in the Security guide for the threat model.
 
+## Deploying to Kubernetes
+
+Full Kubernetes manifests belong in the platform repository that wires up the complete service mesh. The notes below cover the two items that are specific to this image and independent of any particular manifest structure.
+
+### Security context
+
+The image is built `FROM scratch` — it contains only the binary and CA certificates. It can run as a non-root, read-only user with no capabilities:
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534       # nobody
+  runAsGroup: 65534
+  readOnlyRootFilesystem: true
+```
+
+The only writable path the process needs is the BoltDB directory (`POLICY_DB`). Mount it as an `emptyDir` or a `PersistentVolumeClaim`:
+
+```yaml
+volumeMounts:
+  - name: policy-db
+    mountPath: /data
+```
+
+### Health probes
+
+Both probes hit the HTTP listener on `health_addr` (default `:8081`):
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 8081
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+`/health/ready` returns `503` during graceful shutdown so the load balancer stops routing new requests before in-flight RPCs are drained.
+
 ## Scope intersection
 
 When a caller requests scopes, the server returns only the intersection of the requested scopes and the policy's `allowed_scopes`. Scopes not in `allowed_scopes` are silently dropped (not an error). If the intersection is empty, the exchange is denied.

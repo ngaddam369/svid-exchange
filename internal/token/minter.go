@@ -17,8 +17,34 @@ import (
 
 const issuer = "svid-exchange"
 
-// jwtHeader is the base64url-encoded ES256 JWT header, constant across all tokens.
-var jwtHeader = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES256","typ":"JWT"}`))
+// KeyID returns the RFC 7638 SHA-256 thumbprint of pub encoded as a base64url
+// string. This is used as the "kid" header in minted JWTs and as the key ID
+// in the JWKS document.
+func KeyID(pub *ecdsa.PublicKey) (string, error) {
+	raw, err := pub.Bytes()
+	if err != nil {
+		return "", fmt.Errorf("encode public key: %w", err)
+	}
+	const p256Len = 65
+	if len(raw) != p256Len || raw[0] != 0x04 {
+		return "", fmt.Errorf("unexpected P-256 point: got %d bytes with prefix 0x%02x", len(raw), raw[0])
+	}
+	byteLen := (len(raw) - 1) / 2
+	x := base64.RawURLEncoding.EncodeToString(raw[1 : 1+byteLen])
+	y := base64.RawURLEncoding.EncodeToString(raw[1+byteLen:])
+	type thumbInput struct {
+		Crv string `json:"crv"`
+		Kty string `json:"kty"`
+		X   string `json:"x"`
+		Y   string `json:"y"`
+	}
+	thumbJSON, err := json.Marshal(thumbInput{Crv: "P-256", Kty: "EC", X: x, Y: y})
+	if err != nil {
+		return "", fmt.Errorf("marshal thumbprint: %w", err)
+	}
+	sum := sha256.Sum256(thumbJSON)
+	return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+}
 
 // Minter signs JWTs using a Signer and supports key rotation.
 // The zero value is not usable; use NewMinter or NewMinterFromSigner.
@@ -106,6 +132,20 @@ func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32,
 	signer := m.current
 	m.mu.RUnlock()
 
+	kid, err := KeyID(signer.PublicKey())
+	if err != nil {
+		return MintResult{}, fmt.Errorf("compute key id: %w", err)
+	}
+	headerBytes, err := json.Marshal(struct {
+		Alg string `json:"alg"`
+		Typ string `json:"typ"`
+		Kid string `json:"kid"`
+	}{"ES256", "JWT", kid})
+	if err != nil {
+		return MintResult{}, fmt.Errorf("marshal jwt header: %w", err)
+	}
+	header := base64.RawURLEncoding.EncodeToString(headerBytes)
+
 	jti := uuid.New().String()
 	now := time.Now().UTC()
 	exp := now.Add(time.Duration(ttlSeconds) * time.Second)
@@ -128,7 +168,7 @@ func (m *Minter) Mint(subject, target string, scopes []string, ttlSeconds int32,
 	}
 
 	payload := base64.RawURLEncoding.EncodeToString(payloadBytes)
-	signingString := jwtHeader + "." + payload
+	signingString := header + "." + payload
 	digest := sha256.Sum256([]byte(signingString))
 
 	sig, err := signer.Sign(digest[:])

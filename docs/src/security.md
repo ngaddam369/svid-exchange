@@ -42,6 +42,7 @@ Tokens issued by svid-exchange are ES256 JWTs with the following security proper
 | Property | Detail |
 |----------|--------|
 | **Algorithm** | ES256 (ECDSA P-256) — no shared secret, asymmetric |
+| **Key ID (`kid`)** | JWT header carries the RFC 7638 SHA-256 thumbprint of the signing key — downstream verifiers can select the right key from `/jwks` without trying all entries |
 | **Audience** | Bound to a specific target SPIFFE ID — token cannot be replayed to a different service |
 | **Scopes** | Limited to what the policy allows — caller cannot escalate |
 | **TTL** | Capped by `max_ttl` in policy — no long-lived tokens |
@@ -63,7 +64,7 @@ The safety invariant is:
 key_rotation_interval  ≥  max_ttl (across all policies)
 ```
 
-If the interval is shorter than the longest `max_ttl` in the policy file, tokens can outlive their signing key and become unverifiable before they expire. svid-exchange does not enforce this automatically; the operator is responsible for setting both values consistently.
+If the interval is shorter than the longest `max_ttl` in the policy file, tokens can outlive their signing key and become unverifiable before they expire. svid-exchange enforces this invariant at startup and on every hot-reload: if any policy's `max_ttl` exceeds `key_rotation_interval`, the server refuses to start (or rejects the reload) with a descriptive error. When rotation is disabled (`key_rotation_interval: 0`), the check is skipped — no eviction ever occurs and tokens remain verifiable for their full lifetime.
 
 Practical guidance:
 
