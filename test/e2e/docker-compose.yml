@@ -28,11 +28,10 @@ services:
       - |
         set -eu
         SOCKET="/opt/spire/sockets/server.sock"
-        TOKEN="$(cat /opt/spire/sockets/join-token)"
-        AGENT_ID="spiffe://cluster.local/spire/agent/join_token/${TOKEN}"
+        AGENT_ID="$$(spire-server agent list -socketPath "$$SOCKET" | awk '/SPIFFE ID/{print $$NF; exit}')"
         spire-server entry create \
-          -socketPath "$SOCKET" \
-          -parentID   "$AGENT_ID" \
+          -socketPath "$$SOCKET" \
+          -parentID   "$$AGENT_ID" \
           -spiffeID   "spiffe://cluster.local/ns/default/sa/e2e-caller" \
           -selector   "unix:uid:0" 2>&1 \
           || echo "e2e-caller entry may already exist — continuing"

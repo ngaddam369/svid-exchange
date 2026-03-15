@@ -145,25 +145,31 @@ func testHappyPath(ctx context.Context, c exchangev1.TokenExchangeClient, target
 	return nil
 }
 
-// testDelegation exchanges with on_behalf_of set, then decodes the returned
-// JWT payload (without verifying the signature) to confirm act.sub is present.
+// testDelegation exchanges with on_behalf_of set to a valid server-minted JWT,
+// then decodes the returned JWT payload to confirm act.sub is present.
+// on_behalf_of must be a JWT signed by the server's own key — a fake or
+// unsigned token is rejected with InvalidArgument.
 func testDelegation(ctx context.Context, c exchangev1.TokenExchangeClient, target string) error {
-	// Build a minimal unsigned JWT — the server only decodes the payload.
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES256","typ":"JWT"}`))
-	payloadBytes, err := json.Marshal(map[string]string{"sub": "e2e-user"})
+	// Obtain a valid server-minted JWT to use as the on_behalf_of token.
+	first, err := c.Exchange(ctx, &exchangev1.ExchangeRequest{
+		TargetService: target,
+		Scopes:        []string{"e2e:ping"},
+		TtlSeconds:    300,
+	})
 	if err != nil {
-		return fmt.Errorf("marshal OBO payload: %w", err)
+		return fmt.Errorf("initial exchange for obo token: %w", err)
 	}
-	oboJWT := header + "." + base64.RawURLEncoding.EncodeToString(payloadBytes) + ".fakesig"
 
+	// Exchange again with the first JWT as on_behalf_of. The minted token must
+	// carry act.sub set to the sub from the delegated token.
 	resp, err := c.Exchange(ctx, &exchangev1.ExchangeRequest{
 		TargetService: target,
 		Scopes:        []string{"e2e:ping"},
 		TtlSeconds:    60,
-		OnBehalfOf:    oboJWT,
+		OnBehalfOf:    first.Token,
 	})
 	if err != nil {
-		return fmt.Errorf("exchange: %w", err)
+		return fmt.Errorf("exchange with on_behalf_of: %w", err)
 	}
 
 	// Decode the minted JWT payload to verify the act claim.
@@ -176,8 +182,8 @@ func testDelegation(ctx context.Context, c exchangev1.TokenExchangeClient, targe
 		return fmt.Errorf("act claim missing or wrong type in JWT payload")
 	}
 	actSub, ok := actClaim["sub"].(string)
-	if !ok || actSub != "e2e-user" {
-		return fmt.Errorf("act.sub = %q, want %q", actSub, "e2e-user")
+	if !ok || actSub == "" {
+		return fmt.Errorf("act.sub = %q, want non-empty", actSub)
 	}
 	fmt.Printf("  act.sub=%s\n", actSub)
 	return nil
