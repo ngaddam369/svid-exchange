@@ -83,8 +83,19 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Build all images (base stack + e2e overlay) in one shot so the Docker
+      # layer cache is fully warm before starting anything. This ensures that
+      # when make e2e later calls `compose up --build`, Docker finds identical
+      # layer hashes and skips rebuilding — preventing compose from detecting
+      # an image change and recreating the base stack containers (spire-init,
+      # spire-agent). If those containers were recreated mid-test, spire-server
+      # would accumulate a stale agent entry alongside the new one, causing
+      # e2e-spire-init to resolve the wrong parent ID from `agent list`.
+      - name: Build all images
+        run: docker compose -f docker-compose.yml -f test/e2e/docker-compose.yml build
+
       - name: Start base stack (detached)
-        run: docker compose up --build -d
+        run: docker compose up -d
 
       # svid-exchange only becomes healthy once the full SPIRE chain completes:
       # spire-server → spire-init (one-shot) → spire-agent (healthy) → svid-exchange.
