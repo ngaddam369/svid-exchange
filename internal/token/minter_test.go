@@ -4,9 +4,11 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -330,6 +332,60 @@ func TestTokenValidation(t *testing.T) {
 		})
 		if !errors.Is(err, jwt.ErrTokenExpired) {
 			t.Errorf("expected ErrTokenExpired, got %v", err)
+		}
+	})
+}
+
+func TestDERToP1363(t *testing.T) {
+	t.Run("valid DER round-trip", func(t *testing.T) {
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatalf("generate key: %v", err)
+		}
+		digest := make([]byte, 32)
+		der, err := ecdsa.SignASN1(rand.Reader, key, digest)
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		p1363, err := DERToP1363(der, 32)
+		if err != nil {
+			t.Fatalf("DERToP1363: %v", err)
+		}
+		if len(p1363) != 64 {
+			t.Errorf("expected 64 bytes, got %d", len(p1363))
+		}
+		// Verify r and s round-trip correctly.
+		var sig struct{ R, S *big.Int }
+		if _, err = asn1.Unmarshal(der, &sig); err != nil {
+			t.Fatalf("unmarshal DER: %v", err)
+		}
+		r := new(big.Int).SetBytes(p1363[:32])
+		s := new(big.Int).SetBytes(p1363[32:])
+		if r.Cmp(sig.R) != 0 || s.Cmp(sig.S) != 0 {
+			t.Errorf("r/s mismatch after conversion")
+		}
+	})
+
+	t.Run("invalid DER returns error", func(t *testing.T) {
+		_, err := DERToP1363([]byte("not-a-der-signature"), 32)
+		if err == nil {
+			t.Error("expected error for invalid DER, got nil")
+		}
+	})
+
+	t.Run("truncated DER returns error", func(t *testing.T) {
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatalf("generate key: %v", err)
+		}
+		digest := make([]byte, 32)
+		der, err := ecdsa.SignASN1(rand.Reader, key, digest)
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		_, err = DERToP1363(der[:len(der)/2], 32)
+		if err == nil {
+			t.Error("expected error for truncated DER, got nil")
 		}
 	})
 }
