@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
@@ -56,25 +57,36 @@ func main() {
 		}
 	}()
 
-	x509ctx, err := wlClient.FetchX509Context(ctx)
-	if err != nil {
-		fatalf("fetch X509 context: %v", err)
-	}
-
 	// Find the SVID for the e2e-caller identity.
+	// The SPIRE agent issues the SVID asynchronously after entry registration,
+	// so retry for up to 30 s to avoid a timing race between e2e-spire-init
+	// completing and the agent propagating the new entry.
 	callerID, err := spiffeid.FromString(callerSPIFFEID)
 	if err != nil {
 		fatalf("parse caller SPIFFE ID: %v", err)
 	}
 	var callerSVID *x509svid.SVID
-	for _, svid := range x509ctx.SVIDs {
-		if svid.ID == callerID {
-			callerSVID = svid
+	var x509ctx *workloadapi.X509Context
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		var fetchErr error
+		x509ctx, fetchErr = wlClient.FetchX509Context(ctx)
+		if fetchErr != nil {
+			fatalf("fetch X509 context: %v", fetchErr)
+		}
+		for _, svid := range x509ctx.SVIDs {
+			if svid.ID == callerID {
+				callerSVID = svid
+				break
+			}
+		}
+		if callerSVID != nil {
 			break
 		}
+		time.Sleep(500 * time.Millisecond)
 	}
 	if callerSVID == nil {
-		fatalf("SVID %q not found (got %d SVIDs)", callerSPIFFEID, len(x509ctx.SVIDs))
+		fatalf("SVID %q not found after 30 s", callerSPIFFEID)
 	}
 
 	// ── mTLS gRPC connection ─────────────────────────────────────────────────

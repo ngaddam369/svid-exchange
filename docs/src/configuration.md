@@ -46,6 +46,17 @@ All HTTP endpoints are served on `health_addr` (default `:8081`, set in `config/
 
 The HTTP server has fixed connection timeouts to guard against slow-client (Slowloris) attacks: `ReadHeaderTimeout` 5 s, `ReadTimeout` 10 s, `WriteTimeout` 10 s, `IdleTimeout` 60 s. These are not operator-configurable; they are appropriate for the low-latency, no-body nature of all four endpoints.
 
+## gRPC server limits
+
+The data-plane gRPC server enforces fixed resource limits:
+
+| Limit | Value | Rationale |
+|-------|-------|-----------|
+| Max receive message size | 64 KiB | Well above any valid `ExchangeRequest` (50 scopes, each a short string) |
+| Max concurrent streams | 512 | Bounds per-instance memory under concurrent load |
+
+The admin gRPC server uses a max receive message size of 64 KiB and 64 concurrent streams (admin traffic is expected to be very low-frequency). These limits are not operator-configurable.
+
 ### Prometheus metrics
 
 svid-exchange exposes the standard `grpc_server_*` metric family at `/metrics`. All series are pre-populated at zero on startup, so alerting rules work before the first request lands. See [Prometheus Metrics](features/prometheus-metrics.md) for the full reference, notable `grpc_code` values, and known limitations.

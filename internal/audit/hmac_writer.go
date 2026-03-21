@@ -57,6 +57,9 @@ func (h *hmacWriter) Write(p []byte) (int, error) {
 
 	payload := p[:end] // original bytes to sign (without newline)
 
+	// Build output before acquiring the lock: uses only local variables.
+	body := payload[:len(payload)-1]
+
 	h.mu.Lock()
 	h.seq++
 	seq := h.seq
@@ -70,18 +73,22 @@ func (h *hmacWriter) Write(p []byte) (int, error) {
 	mac.Write(payload)
 	sum := mac.Sum(nil)
 	copy(h.prevMAC[:], sum)
-	h.mu.Unlock()
 
-	// Build output: strip closing '}', inject fields, re-close, add newline.
-	body := payload[:len(payload)-1]
+	// Build the final line while holding the lock and write before releasing.
+	// Holding the lock through the write ensures the on-disk order matches the
+	// sequence numbers: if two goroutines race here, the one that incremented
+	// seq first also writes first, keeping seq/prev_hmac consistent for an
+	// offline verifier.
 	suffix := fmt.Sprintf(`,"seq":%d,"prev_hmac":"%x","hmac":"%x"}`, seq, prevMAC, sum)
-
 	out := make([]byte, 0, len(body)+len(suffix)+1)
 	out = append(out, body...)
 	out = append(out, suffix...)
 	out = append(out, '\n')
 
-	if _, err := h.w.Write(out); err != nil {
+	_, err := h.w.Write(out)
+	h.mu.Unlock()
+
+	if err != nil {
 		return 0, err
 	}
 	return n, nil // report original length to the caller
