@@ -23,33 +23,39 @@ const (
 // Non-secret values come from the YAML config file; secrets and
 // deployment-specific paths come from environment variables only.
 type Config struct {
-	GRPCAddr            string
-	HealthAddr          string
-	AdminAddr           string
-	PolicyFile          string
-	PolicyDB            string
-	GRPCReflection      bool
-	OTLPEndpoint        string
-	RateLimitRPS        float64
-	RateLimitBurst      int
-	KeyRotationInterval time.Duration
-	SpiffeSocket        string
-	AuditHMACKey        []byte
-	AdminSubjects       []string
+	GRPCAddr                 string
+	HealthAddr               string
+	AdminAddr                string
+	PolicyFile               string
+	PolicyDB                 string
+	GRPCReflection           bool
+	OTLPEndpoint             string
+	OTLPInsecure             bool
+	GRPCMaxConcurrentStreams uint32
+	GRPCMaxRecvMsgSizeKB     int
+	RateLimitRPS             float64
+	RateLimitBurst           int
+	KeyRotationInterval      time.Duration
+	SpiffeSocket             string
+	AuditHMACKey             []byte
+	AdminSubjects            []string
 }
 
 // configFile mirrors the YAML structure of config/server.yaml.
 // KeyRotationInterval is kept as a string for parsing via time.ParseDuration.
 type configFile struct {
-	GRPCAddr            string   `yaml:"grpc_addr"`
-	HealthAddr          string   `yaml:"health_addr"`
-	AdminAddr           string   `yaml:"admin_addr"`
-	GRPCReflection      bool     `yaml:"grpc_reflection"`
-	OTLPEndpoint        string   `yaml:"otlp_endpoint"`
-	RateLimitRPS        float64  `yaml:"rate_limit_rps"`
-	RateLimitBurst      int      `yaml:"rate_limit_burst"`
-	KeyRotationInterval string   `yaml:"key_rotation_interval"`
-	AdminSubjects       []string `yaml:"admin_subjects"`
+	GRPCAddr                 string   `yaml:"grpc_addr"`
+	HealthAddr               string   `yaml:"health_addr"`
+	AdminAddr                string   `yaml:"admin_addr"`
+	GRPCReflection           bool     `yaml:"grpc_reflection"`
+	OTLPEndpoint             string   `yaml:"otlp_endpoint"`
+	OTLPInsecure             bool     `yaml:"otlp_insecure"`
+	GRPCMaxConcurrentStreams uint32   `yaml:"grpc_max_concurrent_streams"`
+	GRPCMaxRecvMsgSizeKB     int      `yaml:"grpc_max_recv_msg_size_kb"`
+	RateLimitRPS             float64  `yaml:"rate_limit_rps"`
+	RateLimitBurst           int      `yaml:"rate_limit_burst"`
+	KeyRotationInterval      string   `yaml:"key_rotation_interval"`
+	AdminSubjects            []string `yaml:"admin_subjects"`
 }
 
 // loadConfig reads the YAML config file (path from CONFIG_FILE env var,
@@ -74,16 +80,19 @@ func loadConfig() (Config, error) {
 	}
 
 	cfg := Config{
-		GRPCAddr:       f.GRPCAddr,
-		HealthAddr:     f.HealthAddr,
-		AdminAddr:      f.AdminAddr,
-		GRPCReflection: f.GRPCReflection,
-		OTLPEndpoint:   f.OTLPEndpoint,
-		RateLimitRPS:   f.RateLimitRPS,
-		RateLimitBurst: f.RateLimitBurst,
-		AdminSubjects:  f.AdminSubjects,
-		PolicyFile:     defaultPolicyFile,
-		PolicyDB:       defaultPolicyDB,
+		GRPCAddr:                 f.GRPCAddr,
+		HealthAddr:               f.HealthAddr,
+		AdminAddr:                f.AdminAddr,
+		GRPCReflection:           f.GRPCReflection,
+		OTLPEndpoint:             f.OTLPEndpoint,
+		OTLPInsecure:             f.OTLPInsecure,
+		GRPCMaxConcurrentStreams: f.GRPCMaxConcurrentStreams,
+		GRPCMaxRecvMsgSizeKB:     f.GRPCMaxRecvMsgSizeKB,
+		RateLimitRPS:             f.RateLimitRPS,
+		RateLimitBurst:           f.RateLimitBurst,
+		AdminSubjects:            f.AdminSubjects,
+		PolicyFile:               defaultPolicyFile,
+		PolicyDB:                 defaultPolicyDB,
 	}
 
 	if v := f.KeyRotationInterval; v != "" {
@@ -104,6 +113,14 @@ func loadConfig() (Config, error) {
 	// Default burst to ceil(rps) when unset.
 	if cfg.RateLimitBurst <= 0 && cfg.RateLimitRPS > 0 {
 		cfg.RateLimitBurst = int(math.Ceil(cfg.RateLimitRPS))
+	}
+
+	// Default gRPC resource limits when not set in the config file.
+	if cfg.GRPCMaxConcurrentStreams == 0 {
+		cfg.GRPCMaxConcurrentStreams = 100
+	}
+	if cfg.GRPCMaxRecvMsgSizeKB == 0 {
+		cfg.GRPCMaxRecvMsgSizeKB = 4096
 	}
 
 	// SPIFFE_ENDPOINT_SOCKET — required, infrastructure-specific.

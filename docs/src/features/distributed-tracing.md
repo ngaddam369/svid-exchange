@@ -28,6 +28,16 @@ svid-exchange logs on startup:
 {"message":"OTLP tracing enabled","endpoint":"jaeger:4317"}
 ```
 
+### TLS for the OTLP exporter
+
+By default (`otlp_insecure: true` in `config/server.yaml`) traces are sent in plaintext over gRPC. To encrypt the connection to your OTLP backend, set:
+
+```yaml
+otlp_insecure: false
+```
+
+The exporter will then perform a standard TLS handshake using the system certificate pool. Ensure your OTLP backend presents a certificate trusted by the system.
+
 ### Local Jaeger setup
 
 ```bash

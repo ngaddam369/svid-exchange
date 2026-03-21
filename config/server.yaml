@@ -9,6 +9,16 @@ grpc_reflection: false
 # OTLP gRPC endpoint for distributed tracing. Empty disables tracing.
 otlp_endpoint: ""
 
+# Send OTLP traces over plaintext (true) or TLS (false). Default true for
+# backwards compatibility; set to false when your OTLP backend requires TLS.
+otlp_insecure: true
+
+# gRPC server resource limits (applied to both data-plane and admin servers).
+# grpc_max_concurrent_streams: maximum concurrent streams per connection.
+# grpc_max_recv_msg_size_kb:   maximum inbound message size in KiB.
+grpc_max_concurrent_streams: 100
+grpc_max_recv_msg_size_kb:   4096
+
 # Per-SPIFFE-ID rate limiting (token bucket). 0 disables rate limiting.
 rate_limit_rps:   0
 rate_limit_burst: 0

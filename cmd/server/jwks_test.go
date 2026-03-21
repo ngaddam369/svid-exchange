@@ -147,6 +147,43 @@ func TestNewJWKSHandler(t *testing.T) {
 	}
 }
 
+func TestJWKSHandlerTwoKeys(t *testing.T) {
+	m, err := token.NewMinter()
+	if err != nil {
+		t.Fatalf("NewMinter: %v", err)
+	}
+	if err = m.Rotate(); err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	h := newJWKSHandler(m, zerolog.Nop())
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var doc jwkSet
+	if err = json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(doc.Keys) != 2 {
+		t.Fatalf("got %d keys, want 2", len(doc.Keys))
+	}
+	kids := make(map[string]bool)
+	for _, k := range doc.Keys {
+		if k.Kid == "" {
+			t.Error("key has empty kid")
+		}
+		kids[k.Kid] = true
+	}
+	if len(kids) != 2 {
+		t.Errorf("got %d distinct kids, want 2", len(kids))
+	}
+}
+
 func TestJWKSHandlerAfterRotation(t *testing.T) {
 	m, err := token.NewMinter()
 	if err != nil {

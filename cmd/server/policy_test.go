@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ngaddam369/svid-exchange/internal/policy"
 )
@@ -177,4 +180,53 @@ func TestAtomicPolicyRebuild(t *testing.T) {
 			t.Error("expected error for duplicate (subject, target) pair, got nil")
 		}
 	})
+}
+
+func TestAtomicPolicyConcurrentRebuildEvaluate(t *testing.T) {
+	const (
+		subA = "spiffe://cluster.local/ns/default/sa/a"
+		tgt  = "spiffe://cluster.local/ns/default/sa/target"
+	)
+	ap := newAtomicPolicy(loadTestPolicy(t, subA, tgt))
+	store := newTestStore(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	// 20 goroutines evaluating in a tight loop.
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				// Must not panic regardless of concurrent rebuilds.
+				_ = ap.Evaluate(subA, tgt, []string{"r:w"}, 30)
+			}
+		}()
+	}
+
+	// 1 goroutine rebuilding in a tight loop.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		base := loadTestPolicy(t, subA, tgt).Policies()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			ap.setBase(base)
+			_ = ap.rebuild(store) // ignore errors from duplicate detection
+		}
+	}()
+
+	wg.Wait()
 }

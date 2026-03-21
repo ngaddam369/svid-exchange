@@ -127,7 +127,7 @@ func TestContextCancellation(t *testing.T) {
 }
 
 func TestReplayAndRevocation(t *testing.T) {
-	t.Run("duplicate JTI is rejected with AlreadyExists", func(t *testing.T) {
+	t.Run("duplicate JTI is rejected with Aborted", func(t *testing.T) {
 		svc := server.New(okExtractor(), allowedPolicy([]string{"payments:charge"}, 300), okMinter(), mockAudit{})
 
 		_, err := svc.Exchange(context.Background(), newValidReq())
@@ -136,8 +136,8 @@ func TestReplayAndRevocation(t *testing.T) {
 		}
 
 		_, err = svc.Exchange(context.Background(), newValidReq())
-		if status.Code(err) != codes.AlreadyExists {
-			t.Errorf("second exchange: code = %v, want AlreadyExists", status.Code(err))
+		if status.Code(err) != codes.Aborted {
+			t.Errorf("second exchange: code = %v, want Aborted", status.Code(err))
 		}
 	})
 

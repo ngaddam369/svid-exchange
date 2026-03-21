@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -207,5 +208,52 @@ func TestToken(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, tc.run)
+	}
+}
+
+func TestClientTokenConcurrent(t *testing.T) {
+	const targetID = "spiffe://test.local/payment"
+	mock := &mockExchanger{}
+	c := newWithExchanger(mock, targetID, []string{"read"}, 60)
+
+	ctx := context.Background()
+
+	// Warm the cache with one call.
+	if _, err := c.Token(ctx); err != nil {
+		t.Fatalf("warm Token: %v", err)
+	}
+
+	// Force all subsequent calls to be at or past the refresh boundary.
+	c.cached.mu.Lock()
+	c.cached.refreshAt = time.Now()
+	c.cached.mu.Unlock()
+
+	const goroutines = 50
+	var (
+		wg    sync.WaitGroup
+		empty atomic.Int64
+		errs  atomic.Int64
+	)
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			tok, err := c.Token(ctx)
+			if err != nil {
+				errs.Add(1)
+				return
+			}
+			if tok == "" {
+				empty.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if errs.Load() > 0 {
+		t.Errorf("%d goroutines got errors from Token()", errs.Load())
+	}
+	if empty.Load() > 0 {
+		t.Errorf("%d goroutines got empty tokens", empty.Load())
 	}
 }

@@ -1,6 +1,7 @@
 package token
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 	"errors"
 	"math/big"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -388,4 +390,101 @@ func TestDERToP1363(t *testing.T) {
 			t.Error("expected error for truncated DER, got nil")
 		}
 	})
+}
+
+// errSigner is a Signer whose Sign always fails.
+type errSigner struct {
+	pub *ecdsa.PublicKey
+}
+
+func (e *errSigner) Sign(_ []byte) ([]byte, error) {
+	return nil, errors.New("kms unavailable")
+}
+
+func (e *errSigner) PublicKey() *ecdsa.PublicKey {
+	return e.pub
+}
+
+func TestMintSignerError(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	m := NewMinterFromSigner(&errSigner{pub: &key.PublicKey})
+	_, err = m.Mint("spiffe://a", "spiffe://b", []string{"r"}, 60, "")
+	if err == nil {
+		t.Fatal("expected error from Mint, got nil")
+	}
+	if !strings.Contains(err.Error(), "kms unavailable") {
+		t.Errorf("error %q does not wrap 'kms unavailable'", err)
+	}
+}
+
+func TestMinterConcurrentMintRotate(t *testing.T) {
+	m, err := NewMinter()
+	if err != nil {
+		t.Fatalf("NewMinter: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		tokens []string
+	)
+
+	// 50 goroutines minting in a loop.
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				r, err := m.Mint("spiffe://a", "spiffe://b", []string{"r"}, 60, "")
+				if err != nil {
+					t.Errorf("Mint: %v", err)
+					return
+				}
+				mu.Lock()
+				tokens = append(tokens, r.Token)
+				mu.Unlock()
+			}
+		}()
+	}
+
+	// 5 goroutines rotating in a loop.
+	for range 5 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				if err := m.Rotate(); err != nil {
+					t.Errorf("Rotate: %v", err)
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify all collected tokens are non-empty.
+	mu.Lock()
+	defer mu.Unlock()
+	for i, tok := range tokens {
+		if tok == "" {
+			t.Errorf("token[%d] is empty", i)
+		}
+	}
 }

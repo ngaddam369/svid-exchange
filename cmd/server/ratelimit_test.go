@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -196,4 +199,51 @@ func TestChainUnary(t *testing.T) {
 			t.Error("handler should not be called when first interceptor short-circuits")
 		}
 	})
+}
+
+func TestRateLimitConcurrent(t *testing.T) {
+	const (
+		numIDs     = 10
+		goroutines = 10
+		rps        = 5.0
+		burst      = 2
+		callsEach  = 20
+	)
+	store := &limiterStore{
+		m:     make(map[string]*limiterEntry),
+		rps:   rate.Limit(rps),
+		burst: burst,
+	}
+
+	var (
+		wg        sync.WaitGroup
+		exhausted atomic.Int64
+	)
+	for i := range numIDs {
+		for range goroutines {
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+				for range callsEach {
+					if !store.get(id).Allow() {
+						exhausted.Add(1)
+					}
+				}
+			}(fmt.Sprintf("spiffe://example.org/svc-%d", i))
+		}
+	}
+	wg.Wait()
+
+	// All IDs must be present.
+	store.mu.Lock()
+	n := len(store.m)
+	store.mu.Unlock()
+	if n != numIDs {
+		t.Errorf("store has %d IDs, want %d", n, numIDs)
+	}
+
+	// With burst=2 and 10*20=200 calls per ID burst will be exhausted on many.
+	if exhausted.Load() == 0 {
+		t.Error("expected at least some ResourceExhausted calls, got none")
+	}
 }

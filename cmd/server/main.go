@@ -116,7 +116,7 @@ func main() {
 	auditLog := audit.NewWithHMAC(os.Stdout, cfg.AuditHMACKey)
 
 	// --- Tracing ---
-	tracingShutdown, err := initTracing(rootCtx, cfg.OTLPEndpoint)
+	tracingShutdown, err := initTracing(rootCtx, cfg.OTLPEndpoint, cfg.OTLPInsecure)
 	if err != nil {
 		log.Fatal().Err(err).Msg("init tracing")
 	}
@@ -152,12 +152,8 @@ func main() {
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
 		grpc.UnaryInterceptor(chainUnary(metricsInterceptor, rateLimiter)),
 		newTracingServerOption(),
-		// Bound message size and concurrency to prevent OOM from a valid but
-		// misbehaving workload. 64 KiB is generous for any Exchange request
-		// (50 scopes * typical scope length ≪ 64 KiB). 512 concurrent streams
-		// is well above any realistic per-instance load.
-		grpc.MaxRecvMsgSize(64 * 1024),
-		grpc.MaxConcurrentStreams(512),
+		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSizeKB * 1024),
+		grpc.MaxConcurrentStreams(cfg.GRPCMaxConcurrentStreams),
 	}
 
 	grpcServer := grpc.NewServer(serverOpts...)
@@ -225,8 +221,8 @@ func main() {
 	adminServer := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
 		grpc.UnaryInterceptor(newAdminAuthInterceptor(cfg.AdminSubjects, spiffe.Extractor{})),
-		grpc.MaxRecvMsgSize(64*1024),
-		grpc.MaxConcurrentStreams(64),
+		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSizeKB*1024),
+		grpc.MaxConcurrentStreams(cfg.GRPCMaxConcurrentStreams),
 	)
 	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap, reloadPolicy, svc.Revoke)
 	adminv1.RegisterPolicyAdminServer(adminServer, adminSvc)

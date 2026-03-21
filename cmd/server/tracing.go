@@ -21,15 +21,16 @@ import (
 //
 // The returned shutdown function must be called during graceful shutdown so
 // that any buffered spans are flushed to the backend before the process exits.
-func initTracing(ctx context.Context, endpoint string) (shutdown func(context.Context) error, err error) {
+func initTracing(ctx context.Context, endpoint string, insecure bool) (shutdown func(context.Context) error, err error) {
 	if endpoint == "" {
 		return func(context.Context) error { return nil }, nil
 	}
 
-	exp, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithInsecure(),
-	)
+	opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
+	if insecure {
+		opts = append(opts, otlptracegrpc.WithInsecure())
+	}
+	exp, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create OTLP trace exporter: %w", err)
 	}

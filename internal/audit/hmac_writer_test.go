@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -193,5 +194,22 @@ func TestHMACWriterSeqMonotonic(t *testing.T) {
 		if entry["seq"].(float64) != want {
 			t.Errorf("line %d: seq = %v, want %v", i+1, entry["seq"], want)
 		}
+	}
+}
+
+// errWriter is an io.Writer that always returns an error.
+type errWriter struct{ err error }
+
+func (e errWriter) Write(_ []byte) (int, error) { return 0, e.err }
+
+func TestHMACWriterWriteError(t *testing.T) {
+	want := errors.New("disk full")
+	hw := newHMACWriter(errWriter{err: want}, testKey)
+	_, err := hw.Write([]byte(`{"event":"x"}` + "\n"))
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, want) {
+		t.Errorf("error = %v, want %v", err, want)
 	}
 }

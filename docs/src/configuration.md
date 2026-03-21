@@ -16,12 +16,20 @@ grpc_reflection: false
 # OTLP gRPC endpoint for distributed tracing. Empty disables tracing.
 otlp_endpoint: ""
 
+# Send OTLP traces in plaintext (true) or over TLS (false). Default true.
+# Set to false when your OTLP backend requires TLS. See Distributed Tracing for details.
+otlp_insecure: true
+
 # Per-SPIFFE-ID rate limiting (token bucket). 0 disables rate limiting.
 rate_limit_rps:   0
 rate_limit_burst: 0
 
 # Signing key rotation interval (e.g. "24h"). Empty disables rotation.
 key_rotation_interval: ""
+
+# gRPC resource limits (data-plane and admin servers). 0 uses built-in defaults.
+grpc_max_concurrent_streams: 100
+grpc_max_recv_msg_size_kb:   4096
 
 # SPIFFE IDs permitted to call the admin gRPC API.
 # Empty list allows any authenticated SPIFFE peer (insecure — set explicitly in production).
@@ -48,14 +56,19 @@ The HTTP server has fixed connection timeouts to guard against slow-client (Slow
 
 ## gRPC server limits
 
-The data-plane gRPC server enforces fixed resource limits:
+The data-plane and admin gRPC servers enforce configurable resource limits set via `config/server.yaml`:
 
-| Limit | Value | Rationale |
-|-------|-------|-----------|
-| Max receive message size | 64 KiB | Well above any valid `ExchangeRequest` (50 scopes, each a short string) |
-| Max concurrent streams | 512 | Bounds per-instance memory under concurrent load |
+| Config key | Default | Description |
+|------------|---------|-------------|
+| `grpc_max_concurrent_streams` | `100` | Maximum concurrent gRPC streams per connection. Bounds per-instance memory under concurrent load. |
+| `grpc_max_recv_msg_size_kb` | `4096` | Maximum inbound message size in KiB (4 MiB default). Well above any valid `ExchangeRequest` (50 scopes, each a short string). |
 
-The admin gRPC server uses a max receive message size of 64 KiB and 64 concurrent streams (admin traffic is expected to be very low-frequency). These limits are not operator-configurable.
+Both limits apply equally to the data-plane server (`:8080`) and the admin server (`:8082`).
+
+```yaml
+grpc_max_concurrent_streams: 100
+grpc_max_recv_msg_size_kb:   4096
+```
 
 ### Prometheus metrics
 

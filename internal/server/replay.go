@@ -7,13 +7,16 @@ import (
 
 // jtiCache is a thread-safe in-memory store of issued token IDs.
 // Entries are lazily evicted after their expiry time passes.
+// maxEntries bounds the map size; when the cap is reached new JTIs are not
+// recorded (UUID v4 collision is statistically impossible, so skipping is safe).
 type jtiCache struct {
-	mu      sync.Mutex
-	entries map[string]time.Time // JTI → expiry
+	mu         sync.Mutex
+	entries    map[string]time.Time // JTI → expiry
+	maxEntries int
 }
 
-func newJTICache() *jtiCache {
-	return &jtiCache{entries: make(map[string]time.Time)}
+func newJTICache(maxEntries int) *jtiCache {
+	return &jtiCache{entries: make(map[string]time.Time), maxEntries: maxEntries}
 }
 
 // alreadyIssued records jti with the given expiry and returns false if jti is new.
@@ -24,6 +27,11 @@ func (c *jtiCache) alreadyIssued(jti string, expiry time.Time) bool {
 	c.sweep()
 	if exp, ok := c.entries[jti]; ok && time.Now().Before(exp) {
 		return true
+	}
+	if len(c.entries) >= c.maxEntries {
+		// Cap reached after sweep; skip recording. A UUID v4 collision in
+		// normal operation is statistically impossible, so this is safe.
+		return false
 	}
 	c.entries[jti] = expiry
 	return false
@@ -43,21 +51,29 @@ func (c *jtiCache) sweep() {
 // even if they have not expired yet. Entries are lazily evicted once their
 // natural token expiry has passed — a revoked token that has expired can no
 // longer be presented, so there is no need to keep it in the list.
+// maxEntries bounds the map size; when the cap is reached new revocations are
+// silently dropped (revocations are admin-initiated and rare; a full list is an
+// operational anomaly).
 type revocationList struct {
-	mu  sync.Mutex
-	set map[string]time.Time // JTI → token expiry
+	mu         sync.Mutex
+	set        map[string]time.Time // JTI → token expiry
+	maxEntries int
 }
 
-func newRevocationList() *revocationList {
-	return &revocationList{set: make(map[string]time.Time)}
+func newRevocationList(maxEntries int) *revocationList {
+	return &revocationList{set: make(map[string]time.Time), maxEntries: maxEntries}
 }
 
 // Revoke adds jti to the revocation list with its natural token expiry.
 // Once expiresAt passes the entry is swept on the next isRevoked call.
+// If the cap is reached the entry is silently dropped.
 func (r *revocationList) Revoke(jti string, expiresAt time.Time) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.set) >= r.maxEntries {
+		return
+	}
 	r.set[jti] = expiresAt
-	r.mu.Unlock()
 }
 
 // isRevoked returns true if jti has been explicitly revoked and has not yet

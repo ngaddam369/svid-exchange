@@ -7,7 +7,7 @@ import (
 
 func TestInitTracingNoop(t *testing.T) {
 	// Empty endpoint — should return a noop shutdown function with no error.
-	shutdown, err := initTracing(context.Background(), "")
+	shutdown, err := initTracing(context.Background(), "", true)
 	if err != nil {
 		t.Fatalf("initTracing: %v", err)
 	}

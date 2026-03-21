@@ -62,8 +62,8 @@ func New(e IDExtractor, p PolicyEvaluator, m TokenMinter, a AuditLogger) *TokenE
 		policy:    p,
 		minter:    m,
 		audit:     a,
-		cache:     newJTICache(),
-		revoked:   newRevocationList(),
+		cache:     newJTICache(10_000),
+		revoked:   newRevocationList(5_000),
 	}
 }
 
@@ -89,6 +89,9 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 	}
 	if len(req.Scopes) > maxScopes {
 		return nil, status.Errorf(codes.InvalidArgument, "too many scopes: %d exceeds maximum of %d", len(req.Scopes), maxScopes)
+	}
+	if req.TtlSeconds < 0 {
+		return nil, status.Error(codes.InvalidArgument, "ttl_seconds must be non-negative")
 	}
 
 	var actSubject string
@@ -132,7 +135,7 @@ func (s *TokenExchangeServer) Exchange(ctx context.Context, req *exchangev1.Exch
 	// The check guards against hypothetical minter bugs or future non-UUID JTI
 	// schemes that might reuse IDs.
 	if s.cache.alreadyIssued(minted.TokenID, minted.ExpiresAt) {
-		return nil, status.Error(codes.AlreadyExists, "token id already issued")
+		return nil, status.Error(codes.Aborted, "token id already issued")
 	}
 
 	s.audit.LogExchange(audit.ExchangeEvent{
