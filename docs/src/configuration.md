@@ -159,6 +159,20 @@ When the list is empty the server logs a warning at startup and allows any authe
 
 See [Admin API access control](security.md#admin-api-access-control) in the Security guide for the threat model.
 
+## Horizontal scaling
+
+svid-exchange is designed as a **single-instance service**. The following state is held entirely in process memory and is not shared across replicas:
+
+| Component | Detail |
+|-----------|--------|
+| **Replay protection** (`jtiCache`) | Issued JTIs are tracked in-process. A second replica never sees JTIs issued by the first, so replay attacks succeed across replicas. |
+| **Revocation list** (`revocationList`) | Token revocations applied via `RevokeToken` on one replica are not propagated to other replicas. BoltDB is also single-writer on a single filesystem. |
+| **Rate limiting** (`limiterStore`) | Per-identity token-bucket counters are per-replica. A client can multiply its effective rate limit by the number of replicas. |
+
+**Running multiple replicas will silently degrade security guarantees.** If you need horizontal scale, the correct fix is a shared external store (e.g., Redis or a distributed cache) for all three components. That is an architectural change outside the scope of operator configuration.
+
+**Recommended topology:** run a single replica behind a load balancer that routes all traffic to it, and use a sidecar or a separate HA proxy for availability. Scale vertically (CPU/memory) rather than horizontally.
+
 ## Deploying to Kubernetes
 
 Full Kubernetes manifests belong in the platform repository that wires up the complete service mesh. The notes below cover the two items that are specific to this image and independent of any particular manifest structure.

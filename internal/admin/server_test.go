@@ -32,10 +32,10 @@ var yamlRule = policy.Policy{
 
 func newTestServer(t *testing.T) (*Server, *policy.Store) {
 	t.Helper()
-	return newTestServerWithRevoke(t, func(_ string, _ time.Time) {})
+	return newTestServerWithRevoke(t, func(_ string, _ time.Time) bool { return true })
 }
 
-func newTestServerWithRevoke(t *testing.T, revoke func(string, time.Time)) (*Server, *policy.Store) {
+func newTestServerWithRevoke(t *testing.T, revoke func(string, time.Time) bool) (*Server, *policy.Store) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "policy.db")
 	store, err := policy.OpenStore(dbPath)
@@ -206,7 +206,7 @@ func TestReloadPolicy(t *testing.T) {
 			func() []policy.Policy { return nil },
 			func(_ *policy.Loader) {},
 			func() error { return nil },
-			func(_ string, _ time.Time) {},
+			func(_ string, _ time.Time) bool { return true },
 		)
 		if _, err := svc.ReloadPolicy(context.Background(), &adminv1.ReloadPolicyRequest{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -225,7 +225,7 @@ func TestReloadPolicy(t *testing.T) {
 			func() []policy.Policy { return nil },
 			func(_ *policy.Loader) {},
 			func() error { return errors.New("bad yaml") },
-			func(_ string, _ time.Time) {},
+			func(_ string, _ time.Time) bool { return true },
 		)
 		_, err = svc.ReloadPolicy(context.Background(), &adminv1.ReloadPolicyRequest{})
 		assertCode(t, err, codes.Internal)
@@ -247,7 +247,7 @@ func TestRevokeToken(t *testing.T) {
 
 	t.Run("valid request persists and calls revoke callback", func(t *testing.T) {
 		var revoked []string
-		svc, store := newTestServerWithRevoke(t, func(jti string, _ time.Time) { revoked = append(revoked, jti) })
+		svc, store := newTestServerWithRevoke(t, func(jti string, _ time.Time) bool { revoked = append(revoked, jti); return true })
 
 		exp := time.Now().Add(time.Minute).Unix()
 		_, err := svc.RevokeToken(context.Background(), &adminv1.RevokeTokenRequest{

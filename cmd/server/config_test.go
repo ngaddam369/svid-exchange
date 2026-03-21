@@ -25,14 +25,17 @@ func writeConfigFile(t *testing.T, content string) string {
 
 func TestLoadConfig(t *testing.T) {
 	validYAML := `
-grpc_addr:             ":9090"
-health_addr:           ":9091"
-admin_addr:            ":9092"
-grpc_reflection:       false
-otlp_endpoint:         "otel:4317"
-rate_limit_rps:        5.0
-rate_limit_burst:      10
-key_rotation_interval: "12h"
+grpc_addr:                    ":9090"
+health_addr:                  ":9091"
+admin_addr:                   ":9092"
+grpc_reflection:              false
+otlp_endpoint:                "otel:4317"
+otlp_insecure:                false
+rate_limit_rps:               5.0
+rate_limit_burst:             10
+key_rotation_interval:        "12h"
+grpc_max_concurrent_streams:  200
+grpc_max_recv_msg_size_kb:    8192
 `
 	minimalYAML := "grpc_reflection: true\n"
 
@@ -72,6 +75,29 @@ key_rotation_interval: "12h"
 				}
 				if cfg.KeyRotationInterval != 12*time.Hour {
 					t.Errorf("KeyRotationInterval = %v, want 12h", cfg.KeyRotationInterval)
+				}
+				if cfg.OTLPInsecure {
+					t.Error("OTLPInsecure = true, want false")
+				}
+				if cfg.GRPCMaxConcurrentStreams != 200 {
+					t.Errorf("GRPCMaxConcurrentStreams = %d, want 200", cfg.GRPCMaxConcurrentStreams)
+				}
+				if cfg.GRPCMaxRecvMsgSizeKB != 8192 {
+					t.Errorf("GRPCMaxRecvMsgSizeKB = %d, want 8192", cfg.GRPCMaxRecvMsgSizeKB)
+				}
+			},
+		},
+		{
+			name: "gRPC limit defaults applied when zero",
+			yaml: "grpc_reflection: false\n",
+			env:  map[string]string{"SPIFFE_ENDPOINT_SOCKET": "unix:///tmp/agent.sock"},
+			checkCfg: func(t *testing.T, cfg Config) {
+				t.Helper()
+				if cfg.GRPCMaxConcurrentStreams != 100 {
+					t.Errorf("GRPCMaxConcurrentStreams = %d, want 100 (default)", cfg.GRPCMaxConcurrentStreams)
+				}
+				if cfg.GRPCMaxRecvMsgSizeKB != 4096 {
+					t.Errorf("GRPCMaxRecvMsgSizeKB = %d, want 4096 (default)", cfg.GRPCMaxRecvMsgSizeKB)
 				}
 			},
 		},

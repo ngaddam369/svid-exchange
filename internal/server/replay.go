@@ -65,15 +65,16 @@ func newRevocationList(maxEntries int) *revocationList {
 }
 
 // Revoke adds jti to the revocation list with its natural token expiry.
+// Returns true if the entry was added, false if the cap was already reached.
 // Once expiresAt passes the entry is swept on the next isRevoked call.
-// If the cap is reached the entry is silently dropped.
-func (r *revocationList) Revoke(jti string, expiresAt time.Time) {
+func (r *revocationList) Revoke(jti string, expiresAt time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.set) >= r.maxEntries {
-		return
+		return false
 	}
 	r.set[jti] = expiresAt
+	return true
 }
 
 // isRevoked returns true if jti has been explicitly revoked and has not yet

@@ -68,10 +68,11 @@ func New(e IDExtractor, p PolicyEvaluator, m TokenMinter, a AuditLogger) *TokenE
 }
 
 // Revoke adds jti to the server's revocation list with its natural token expiry.
-// Any subsequent exchange that produces the same token ID is rejected with
-// codes.PermissionDenied. Once expiresAt passes the entry is evicted automatically.
-func (s *TokenExchangeServer) Revoke(jti string, expiresAt time.Time) {
-	s.revoked.Revoke(jti, expiresAt)
+// Returns true if added, false if the revocation list is full (operator must be
+// notified — a full list means the revocation was not applied).
+// Once expiresAt passes the entry is evicted automatically.
+func (s *TokenExchangeServer) Revoke(jti string, expiresAt time.Time) bool {
+	return s.revoked.Revoke(jti, expiresAt)
 }
 
 // Exchange validates the caller's SVID, applies policy, and mints a token.

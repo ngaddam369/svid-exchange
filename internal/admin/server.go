@@ -21,7 +21,7 @@ type Server struct {
 	yamlPolicies func() []policy.Policy
 	swap         func(*policy.Loader)
 	reload       func() error
-	revoke       func(jti string, expiresAt time.Time)
+	revoke       func(jti string, expiresAt time.Time) bool
 }
 
 // New returns a Server. yamlPolicies must return the current YAML-sourced
@@ -34,7 +34,7 @@ func New(
 	yamlPolicies func() []policy.Policy,
 	swap func(*policy.Loader),
 	reload func() error,
-	revoke func(jti string, expiresAt time.Time),
+	revoke func(jti string, expiresAt time.Time) bool,
 ) *Server {
 	return &Server{store: store, yamlPolicies: yamlPolicies, swap: swap, reload: reload, revoke: revoke}
 }
@@ -183,7 +183,9 @@ func (s *Server) RevokeToken(_ context.Context, req *adminv1.RevokeTokenRequest)
 	if err := s.store.SaveRevocation(req.TokenId, req.ExpiresAt); err != nil {
 		return nil, status.Errorf(codes.Internal, "save revocation: %v", err)
 	}
-	s.revoke(req.TokenId, time.Unix(req.ExpiresAt, 0))
+	if !s.revoke(req.TokenId, time.Unix(req.ExpiresAt, 0)) {
+		return nil, status.Error(codes.ResourceExhausted, "revocation list is full; token was persisted but not applied in-memory — restart the server to rebuild the list")
+	}
 	return &adminv1.RevokeTokenResponse{}, nil
 }
 

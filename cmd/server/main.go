@@ -20,6 +20,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/ngaddam369/svid-exchange/internal/admin"
@@ -148,12 +149,24 @@ func main() {
 
 	metricsInterceptor := initMetrics()
 	rateLimiter := newRateLimitInterceptor(rootCtx, cfg.RateLimitRPS, cfg.RateLimitBurst)
+	kpParams := keepalive.ServerParameters{
+		MaxConnectionIdle: 5 * time.Minute,
+		MaxConnectionAge:  30 * time.Minute,
+		Time:              2 * time.Minute,
+		Timeout:           20 * time.Second,
+	}
+	kpPolicy := keepalive.EnforcementPolicy{
+		MinTime:             30 * time.Second,
+		PermitWithoutStream: true,
+	}
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
 		grpc.UnaryInterceptor(chainUnary(metricsInterceptor, rateLimiter)),
 		newTracingServerOption(),
 		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSizeKB * 1024),
 		grpc.MaxConcurrentStreams(cfg.GRPCMaxConcurrentStreams),
+		grpc.KeepaliveParams(kpParams),
+		grpc.KeepaliveEnforcementPolicy(kpPolicy),
 	}
 
 	grpcServer := grpc.NewServer(serverOpts...)
@@ -197,8 +210,11 @@ func main() {
 	loaded := 0
 	for _, r := range revocations {
 		if r.ExpiresAt > time.Now().Unix() {
-			svc.Revoke(r.JTI, time.Unix(r.ExpiresAt, 0))
-			loaded++
+			if !svc.Revoke(r.JTI, time.Unix(r.ExpiresAt, 0)) {
+				log.Warn().Str("jti", r.JTI).Msg("revocation list full; persisted revocation not restored — increase maxEntries or reduce active revocations")
+			} else {
+				loaded++
+			}
 		} else {
 			if err := store.DeleteRevocation(r.JTI); err != nil {
 				log.Warn().Err(err).Str("jti", r.JTI).Msg("cleanup expired revocation")
@@ -223,6 +239,8 @@ func main() {
 		grpc.UnaryInterceptor(newAdminAuthInterceptor(cfg.AdminSubjects, spiffe.Extractor{})),
 		grpc.MaxRecvMsgSize(cfg.GRPCMaxRecvMsgSizeKB*1024),
 		grpc.MaxConcurrentStreams(cfg.GRPCMaxConcurrentStreams),
+		grpc.KeepaliveParams(kpParams),
+		grpc.KeepaliveEnforcementPolicy(kpPolicy),
 	)
 	adminSvc := admin.New(store, ap.yamlPolicies, ap.swap, reloadPolicy, svc.Revoke)
 	adminv1.RegisterPolicyAdminServer(adminServer, adminSvc)

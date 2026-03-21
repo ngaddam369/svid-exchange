@@ -226,6 +226,7 @@ rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
 |------|-----------|
 | `OK` | Token revoked and persisted |
 | `INVALID_ARGUMENT` | `token_id` is empty or `expires_at` is not positive |
+| `RESOURCE_EXHAUSTED` | Revocation persisted to BoltDB but the in-memory revocation list is full; the token will not be rejected until the server is restarted |
 | `INTERNAL` | BoltDB write failed |
 
 #### Example (grpcurl)
